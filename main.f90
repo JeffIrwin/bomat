@@ -107,14 +107,15 @@ program main
 	inz(:,42) = [8, 7]
 	inz(:,43) = [8, 8]
 
-	a = 0.d0
+	a = complex(0.d0, 0.d0)
 	do i = 1, nnonzero
-		a(inz(1,i), inz(2,i)) = s(1)
+		a(inz(1,i), inz(2,i)) = s(mod(i,ns)+1)
 	end do
 
 	! There is no Fortran edit descriptor for complex numbers :(
 	print *, 'a = '
 	print '(16es14.4)', a
+	!print *, 'a = ', a
 
 	! For top-left element only of inverse, we don't need to invert.  Just solve
 	! a linear system with b = [1, 0, 0, 0, ...]
@@ -131,10 +132,13 @@ program main
 	allocate(ipiv(n))
 
 	x = b
-	call cgesv(n, nrhs, a, lda, ipiv, x, ldb, info)
+	!print *, 'x = ', x
+	call zgesv(n, nrhs, a, lda, ipiv, x, ldb, info)
 
 	print *, 'info = ', info
+	!print *, 'ipiv = ', ipiv
 	print *, 'x = ', x
+	!print *, 'a = ', a
 
 	! TODO: iterate through all permutations of a.  Save results for plotting
 
