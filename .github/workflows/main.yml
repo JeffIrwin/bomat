@@ -1,0 +1,68 @@
+
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+
+    env:
+      LAPACK_VERS: 3-10-0
+      LAPACK_DIR: submodules/lapack
+
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+
+    - uses: actions/checkout@v1
+
+    - if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get install gfortran
+
+    - if: matrix.os == 'macOS-latest'
+      run: |
+        brew install gcc
+        brew reinstall gcc
+
+    - name: Cache LAPACK build
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.LAPACK_DIR }}
+        key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
+
+    - name: Checkout submodules
+      shell: bash
+      run: |
+
+        git submodule update --init --recursive || echo "ignoring submodule error"
+
+    - name: Build core LAPACK libs
+      run: |
+
+        pushd ${{ env.LAPACK_DIR }}
+
+        # Use default config (for gfortran)
+        cp make.inc.example make.inc
+
+        # Only these libs are required
+        make blaslib
+        make lib
+
+        ## Careful:  no "ls" on Windows
+        #ls -ltrh
+
+        # From LAPACK dir
+        popd
+
+    - name: Build and test
+      run: |
+
+        gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
+
+        ./main
+
