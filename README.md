@@ -1,12 +1,12 @@
 
-# lapack-hello-world
+# bomat
 
-Build a simple hello-world program compiling LAPACK (and BLAS) from source with
-gfortran, on Windows, Linux, and macOS
+A set of Fortran functions for visualizing Bohemian matrices 
+
+See the original project:  https://github.com/BohemianMatrices/BHIME-Project
 
 ## TODO
 
-- fork LAPACK
-- test changing LAPACK submodule, editing version in yaml, and checking if it
-  will recompile correctly
+- integrate improvements from lapack-hello-world and contribute back
+- integrate bourne again testing framework
 
