@@ -715,9 +715,20 @@ subroutine bomat_json(json, p, finished)
 	class(json_core), intent(inout)       :: json
 	type(json_value), pointer, intent(in) :: p
 	logical(json_LK), intent(out)         :: finished
-	
-	integer(json_IK) :: var_type, ival
+
+	!********
+
 	character(kind=json_CK, len=:), allocatable :: key, sval
+
+	integer(json_IK) :: var_type, ival, ncount, ij
+	integer :: i, j, k, nnonzero
+	integer, allocatable :: template(:), t2(:,:)
+
+	logical(json_LK) :: found
+
+	real(json_RK) :: rvalx, rvaly
+
+	type(json_value), pointer :: pc
 
 	! JSON keys
 	character(len = *), parameter :: &
@@ -730,6 +741,8 @@ subroutine bomat_json(json, p, finished)
 
 	! get info about this variable:
 	call json%info(p, var_type = var_type, name = key)
+
+	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
 
 	! String values
 	if (var_type == json_string) then
@@ -744,19 +757,6 @@ subroutine bomat_json(json, p, finished)
 
 		else if (key == colormap_id) then
 			sg%colormap = sval
-
-		else if (key == population_id) then
-			print *, sval
-			!sg%colormap = val
-
-		else if (key == template_id) then
-			!sg%colormap = val
-
-		else if (key == samples_id) then
-			!sg%colormap = val
-
-		else if (key == img_size_id) then
-			!sg%colormap = val
 
 		else if (key /= "") then
 			! TODO: can this be done generically for any type?
@@ -794,12 +794,95 @@ subroutine bomat_json(json, p, finished)
 
 	else if (var_type == json_array) then
 
-		print *, 'array key = "'//key//'"'
+		ncount = json%count(p)
 
-	else if (key /= "") then
+		!print *, 'array key = "'//key//'"'
+		!print *, 'ncount = ', ncount
+		!print *, ''
 
-		print *, 'key = "'//key//'"'
-		print *, 'var_type = ', var_type
+		if (key == population_id) then
+
+			sg%np = ncount / 2
+			allocate(sg%p(sg%np))
+
+			do ij = 0, sg%np - 1
+
+				call json%get_child(p, ij*2+1, pc, found)
+				call json%get(pc, '@', rvalx)
+				call json%get_child(p, ij*2+2, pc, found)
+				call json%get(pc, '@', rvaly)
+
+				sg%p(ij+1) = cmplx(rvalx, rvaly, kind = 8)
+
+			end do
+
+			!print *, 'sg%p = ', sg%p
+
+		else if (key == template_id) then
+
+			! TODO: this is dangerous.  There's no Fortran integer sqrt
+			sg%n = int(sqrt(dble(ncount)))
+
+			!print *, 'sg%n = ', sg%n
+
+			! TODO
+			if (sg%n * sg%n /= ncount) then
+				write(*,*) 'Error: matrix is not square'
+			end if
+
+			allocate(template(sg%n * sg%n))
+
+			do ij = 1, ncount
+				call json%get_child(p, ij, pc, found)
+				call json%get(pc, '@', ival)
+				!print *, 'ival = ', ival
+				template(ij) = ival
+			end do
+
+			! Number of non-zeros in matrix
+			nnonzero = count(template /= 0)
+
+			allocate(t2(sg%n, sg%n))
+			t2 = reshape(template, [sg%n, sg%n])
+			deallocate(template)
+
+			! Indices of non-zeros
+			allocate(sg%inz(2, nnonzero))
+
+			k = 0
+			do i = 1, sg%n
+			do j = 1, sg%n
+
+				! Note the transpose from row-major template to Fortran default
+				! column-major
+				if (t2(j, i) /= 0) then
+					k = k + 1
+					sg%inz(:, k) = [i, j]
+				end if
+
+			end do
+			end do
+			deallocate(t2)
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown array JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			!write(*,*) 'Value  : "'//sval//'"'
+			write(*,*)
+
+		end if
+
+		! TODO: if possible, update pointer p to tail of array, so this callback
+		! doesn't reiterate through each element individually
+		!
+		! json_get_tail() ?
+
+	else if (key /= "" .and. key /= sg%fjson) then
+
+		write(*,*) 'Warning:  unknown JSON key with unexpected type'
+		write(*,*) 'Key    :"'//key//'"'
+		write(*,*) 'Type   :', var_type
+		write(*,*)
 
 	end if
 
@@ -823,7 +906,6 @@ subroutine load_settings(s, io)
 
 	!********
 
-	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
 
 	type(json_file) :: json
@@ -850,6 +932,8 @@ subroutine load_settings(s, io)
 		return
 	end if
 
+	! TODO:  make a custom settings printer, with population and template neatly
+	! formatted instead of 1 number per line
 	call json%print()
 	write(*,*)
 
@@ -859,23 +943,32 @@ subroutine load_settings(s, io)
 	call json%traverse(bomat_json)
 	s = sg
 
+	!print *, 'size(sg%inz) = ', size(sg%inz)
+	!print *, 'size(s%inz)  = ', size(s%inz)
 	!print *, 's%fcolormap = ', s%fcolormap
 
 	!! TODO: finalize the global object
 	!call destroy(sg)
 
-	! Size of matrices
-	s%n = 8
+	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
+	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
 
-	! Size of population
-	s%np = 3
 
-	! Generator sample set.  This is called the "population"
-	allocate(s%p(s%np))
 
-	s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
-	s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
+
+
+	!! Size of matrices
+	!s%n = 8
+
+	!! Size of population
+	!s%np = 3
+
+	!! Generator sample set.  This is called the "population"
+	!allocate(s%p(s%np))
+
+	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
+	!s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
+	!s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
 
 	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
 	!s%p(1) = cmplx(0.5d0, 0.d0, kind = 8)
@@ -884,9 +977,9 @@ subroutine load_settings(s, io)
 	!s%p(2) = cmplx(0.d0,  1.d0, kind = 8)
 	!s%p(3) = cmplx(0.d0, -1.d0, kind = 8)
 
-	s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
-	s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
-	s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
+	!s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
+	!s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
+	!s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
 
 	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
 	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
@@ -941,7 +1034,7 @@ subroutine load_settings(s, io)
 
 	! Non-zero pattern template
 
-	allocate(template(s%n * s%n))
+	!allocate(template(s%n * s%n))
 
 	!! Upper triangle, main diagonal, and first band below diagonal
 	!template = [                &
@@ -955,20 +1048,17 @@ subroutine load_settings(s, io)
 	!	0, 0, 0, 0, 0, 0, 1, 1  &
 	!	]
 
-	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
-	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
-
-	! 8x8
-	template = [                &
-		1, 1, 0, 0, 0, 0, 0, 0, &
-		1, 1, 1, 0, 0, 0, 0, 0, &
-		0, 1, 1, 1, 0, 0, 0, 0, &
-		0, 0, 1, 1, 1, 0, 0, 0, &
-		0, 0, 0, 1, 1, 1, 0, 0, &
-		0, 0, 0, 0, 1, 1, 1, 0, &
-		0, 0, 0, 0, 0, 1, 1, 1, &
-		0, 0, 0, 0, 0, 0, 1, 1  &
-		]
+	!! 8x8
+	!template = [                &
+	!	1, 1, 0, 0, 0, 0, 0, 0, &
+	!	1, 1, 1, 0, 0, 0, 0, 0, &
+	!	0, 1, 1, 1, 0, 0, 0, 0, &
+	!	0, 0, 1, 1, 1, 0, 0, 0, &
+	!	0, 0, 0, 1, 1, 1, 0, 0, &
+	!	0, 0, 0, 0, 1, 1, 1, 0, &
+	!	0, 0, 0, 0, 0, 1, 1, 1, &
+	!	0, 0, 0, 0, 0, 0, 1, 1  &
+	!	]
 
 	!! 7x7
 	!template = [                &
@@ -1098,32 +1188,32 @@ subroutine load_settings(s, io)
 
 	! Mark non-zero locations from template 1/0's matrix
 
-	! Number of non-zeros in matrix
-	nnonzero = count(template /= 0)
+	!! Number of non-zeros in matrix
+	!nnonzero = count(template /= 0)
 
-	!print *, "nnonzero = ", nnonzero
+	!!print *, "nnonzero = ", nnonzero
 
-	allocate(t2(s%n, s%n))
-	t2 = reshape(template, [s%n, s%n])
-	deallocate(template)
+	!allocate(t2(s%n, s%n))
+	!t2 = reshape(template, [s%n, s%n])
+	!deallocate(template)
 
-	! Indices of non-zeros
-	allocate(s%inz(2, nnonzero))
+	!! Indices of non-zeros
+	!allocate(s%inz(2, nnonzero))
 
-	k = 0
-	do i = 1, s%n
-	do j = 1, s%n
+	!k = 0
+	!do i = 1, s%n
+	!do j = 1, s%n
 
-		! Note the transpose from row-major template to Fortran default
-		! column-major
-		if (t2(j, i) /= 0) then
-			k = k + 1
-			s%inz(:, k) = [i, j]
-		end if
+	!	! Note the transpose from row-major template to Fortran default
+	!	! column-major
+	!	if (t2(j, i) /= 0) then
+	!		k = k + 1
+	!		s%inz(:, k) = [i, j]
+	!	end if
 
-	end do
-	end do
-	deallocate(t2)
+	!end do
+	!end do
+	!deallocate(t2)
 
 end subroutine load_settings
 

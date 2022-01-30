@@ -12,7 +12,8 @@
 	],
 
 	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
-	# from population
+	# from population.  This JSON array is rank-1, but it is reshaped in
+	# a row-major sense into a rank-2 matrix
 	"Template matrix":
 	[
 		1, 1, 0, 0, 0, 0, 0, 0,
@@ -25,11 +26,14 @@
 		0, 0, 0, 0, 0, 0, 1, 1
 	],
 
+# Unexpected type
+#	"Aeou": 1.2,
+
 	"Samples": 1000000,
 
 	"Image size": 1080,
 
 	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-	"Colormap name": "Viridis (matplotlib)"
+	"Colormap name": "Plasma (matplotlib)"
 
 }
