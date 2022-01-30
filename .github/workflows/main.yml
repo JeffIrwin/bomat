@@ -62,7 +62,8 @@ jobs:
     - name: Build and test
       run: |
 
-        gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
+        #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
 
-        ./main
+        ./build.sh
+        ./run.sh
 
