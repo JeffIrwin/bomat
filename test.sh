@@ -1,13 +1,13 @@
 #!/bin/bash
 
-inputs=./examples/*.json
+inputs=./tests/*.json
 
 frames=()
 outputext=png
 
 exebase=bomat
-outdir=./examples/
-expectedoutdir=./examples/expected-output
+outdir=./tests/
+expectedoutdir=./tests/expected-output
 use_stdin="false"
 use_pushpop="false"
 
