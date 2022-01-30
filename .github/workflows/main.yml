@@ -67,5 +67,6 @@ jobs:
 
         pwd
         ls
+        chmod +x ./test.sh
         ./test.sh --no-diff
 
