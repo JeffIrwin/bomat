@@ -64,5 +64,5 @@ jobs:
 
         #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
 
-        bash ./test.sh --nodiff
+        bash "./test.sh --nodiff"
 
