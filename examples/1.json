@@ -1,11 +1,35 @@
 {
 
-# This is a comment (non-standard JSON extension)
+	# This is a comment (non-standard JSON extension)
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		1   , -1,
+		1   ,  0,
+		1   ,  1
+	],
+
+	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
+	# from population
+	"Template matrix":
+	[
+		1, 1, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 0, 0, 0, 0, 0,
+		0, 1, 1, 1, 0, 0, 0, 0,
+		0, 0, 1, 1, 1, 0, 0, 0,
+		0, 0, 0, 1, 1, 1, 0, 0,
+		0, 0, 0, 0, 1, 1, 1, 0,
+		0, 0, 0, 0, 0, 1, 1, 1,
+		0, 0, 0, 0, 0, 0, 1, 1
+	],
+
+	"Samples": 1000000,
+
+	"Image size": 1080,
 
 	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-	"Coormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-
-#	"Colormap name": "Magma (matplotlib)"
 	"Colormap name": "Viridis (matplotlib)"
 
 }

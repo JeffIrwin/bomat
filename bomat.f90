@@ -716,40 +716,92 @@ subroutine bomat_json(json, p, finished)
 	type(json_value), pointer, intent(in) :: p
 	logical(json_LK), intent(out)         :: finished
 	
-	integer(json_IK) :: var_type
-	character(kind=json_CK, len=:), allocatable :: key, val
+	integer(json_IK) :: var_type, ival
+	character(kind=json_CK, len=:), allocatable :: key, sval
 
 	! JSON keys
 	character(len = *), parameter :: &
-		fcolormap_id = 'Colormap file', &
-		colormap_id  = 'Colormap name'
+		population_id = 'Population'     , &
+		template_id   = 'Template matrix', &
+		samples_id    = 'Samples'        , &
+		img_size_id   = 'Image size'     , &
+		fcolormap_id  = 'Colormap file'  , &
+		colormap_id   = 'Colormap name'
 
 	! get info about this variable:
-	call json%info(p,var_type=var_type,name=key)
+	call json%info(p, var_type = var_type, name = key)
 
-	! it must be a string
-	if (var_type==json_string) then
+	! String values
+	if (var_type == json_string) then
 
-		call json%get(p, '@', val)
+		call json%get(p, '@', sval)
 
 		!print *, 'key = "'//key//'"'
-		!print *, 'val = "'//val//'"'
+		!print *, 'val = "'//sval//'"'
 
 		if (key == fcolormap_id) then
-			sg%fcolormap = val
+			sg%fcolormap = sval
 
 		else if (key == colormap_id) then
-			sg%colormap = val
+			sg%colormap = sval
 
-		else
-			write(*,*) 'Warning:  unknown JSON key'
+		else if (key == population_id) then
+			print *, sval
+			!sg%colormap = val
+
+		else if (key == template_id) then
+			!sg%colormap = val
+
+		else if (key == samples_id) then
+			!sg%colormap = val
+
+		else if (key == img_size_id) then
+			!sg%colormap = val
+
+		else if (key /= "") then
+			! TODO: can this be done generically for any type?
+			write(*,*) 'Warning:  unknown string JSON key'
 			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : "'//val//'"'
+			write(*,*) 'Value  : "'//sval//'"'
 			write(*,*)
 
 		end if
 
-    end if
+	! Integer values
+	!else if (var_type == json_RK) then
+	else if (var_type == json_integer) then
+	!else if (var_type == json_IK) then
+
+		call json%get(p, '@', ival)
+
+		!print *, 'key = "'//key//'"'
+		!print *, 'val = ', ival
+
+		if (key == samples_id) then
+			sg%nsample = ival
+
+		else if (key == img_size_id) then
+			sg%nx = ival
+			sg%ny = ival
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown integer JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			write(*,*) 'Value  : ', ival
+			write(*,*)
+
+		end if
+
+	else if (var_type == json_array) then
+
+		print *, 'array key = "'//key//'"'
+
+	else if (key /= "") then
+
+		print *, 'key = "'//key//'"'
+		print *, 'var_type = ', var_type
+
+	end if
 
 	! always false, since we want to traverse all nodes:
 	finished = .false.
@@ -970,8 +1022,8 @@ subroutine load_settings(s, io)
 	!! Fully-dense
 	!template = 1
 
-	! Number of random samples to take
-	s%nsample = 1000000
+	!! Number of random samples to take
+	!s%nsample = 1000000
 
 	!! Colormap file and name
 	!s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
@@ -1011,10 +1063,10 @@ subroutine load_settings(s, io)
 
 	!s%nx = 3840
 	!s%nx = 1920
-	s%nx = 1080
+	!s%nx = 1080
 	!s%nx = 720
 
-	s%ny = s%nx
+	!s%ny = s%nx
 	!s%ny = 4352
 	!s%ny = 4292
 
