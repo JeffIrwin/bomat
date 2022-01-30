@@ -16,13 +16,13 @@ set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
 if(APPLE)
 	set(CMAKE_EXE_LINKER_FLAGS "-openmp -Wl,-no_compact_unwind")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+	set(CMAKE_C_COMPILER "gcc")
+	set(CMAKE_CXX_COMPILER "g++")
 else()
 	set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
 endif()
 
 set(CMAKE_Fortran_COMPILER "gfortran")
-set(CMAKE_C_COMPILER "gcc")
-set(CMAKE_CXX_COMPILER "g++")
 
 set(SUBMODULE_DIR submodules)
 
