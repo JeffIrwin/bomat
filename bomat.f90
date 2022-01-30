@@ -20,9 +20,10 @@ module mbomat
 	integer, parameter :: nrgb = 3
 
 	integer, parameter :: &
-			ERR_WRITEPNG = -1, &
-			ERR_COLORMAP = -2, &
-			ERR_CMD_ARGS = -3
+			ERR_LOAD_JSON = -4, &
+			ERR_CMD_ARGS  = -3, &
+			ERR_COLORMAP  = -2, &
+			ERR_WRITEPNG  = -1
 
 	!********
 
@@ -703,17 +704,51 @@ subroutine load_settings(s, io)
 	! Load hard-coded settings.  TODO: json config file TBD, this API is not
 	! stable
 
+	use json_module
+
 	type(bomat_settings), intent(inout) :: s
 
 	integer, intent(out) :: io
 
 	!********
 
+	character(len = :), allocatable :: str
+
 	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
 
+	logical :: found
+
+	type(json_file) :: json
+
 	! Not actually thrown from here
 	io = 0
+
+	write(*,*) 'Loading json file "'//s%fjson//'" ...'
+	write(*,*)
+
+	! Set defaults TODO TBD
+	s%n = 0
+	s%fcolormap = ""
+	s%colormap  = ""
+
+	call json%initialize()
+	call json%load(filename = s%fjson)
+	if (json%failed()) then
+		write(*,*) 'Error'
+		write(*,*) 'Could not load file "'//s%fjson//'"'
+		write(*,*)
+		io = ERR_LOAD_JSON
+		return
+	end if
+
+	call json%print()
+
+	call json%get('Colormap file', str, found)
+	if (found) s%fcolormap = str
+
+	call json%get('Colormap name', str, found)
+	if (found) s%colormap = str
 
 	! Size of matrices
 	s%n = 8
@@ -876,13 +911,13 @@ subroutine load_settings(s, io)
 	! Number of random samples to take
 	s%nsample = 1000000
 
-	! Colormap file and name
-	s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
+	!! Colormap file and name
+	!s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
 
 	!s%colormap = "Inferno (matplotlib)"
 	!s%colormap = "Viridis (matplotlib)"
 	!s%colormap = "Magma (matplotlib)"
-	s%colormap = "Plasma (matplotlib)"
+	!s%colormap = "Plasma (matplotlib)"
 
 	!s%colormap = "erdc_blue2green_BW"
 	!s%colormap = "Black, Blue and White"

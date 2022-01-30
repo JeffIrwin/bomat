@@ -23,18 +23,18 @@ else()
 	set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
 endif()
 
-set(CMAKE_Fortran_COMPILER "gfortran")
+#set(CMAKE_Fortran_COMPILER "gfortran")
 
 set(SUBMODULE_DIR submodules)
 
 #set(PNMIO pnmio)
-#set(JSONFORTRAN json-fortran)
+set(JSONFORTRAN json-fortran)
 set(COLORMAPPER colormapper)
 
 set(LAPACK_DIR ${SUBMODULE_DIR}/lapack)
 
 #add_subdirectory(${SUBMODULE_DIR}/${PNMIO})
-#add_subdirectory(${SUBMODULE_DIR}/${JSONFORTRAN})
+add_subdirectory(${SUBMODULE_DIR}/${JSONFORTRAN})
 add_subdirectory(${SUBMODULE_DIR}/${COLORMAPPER})
 
 add_executable(${PROJECT}
@@ -42,16 +42,16 @@ add_executable(${PROJECT}
 	colormapper_wrapper.cpp
 	)
 
-#include_directories(
+include_directories(
 ##	${CMAKE_CURRENT_BINARY_DIR}/${SUBMODULE_DIR}/${PNMIO}
-##	${CMAKE_CURRENT_BINARY_DIR}/${SUBMODULE_DIR}/${JSONFORTRAN}/include
-#	)
+	${CMAKE_CURRENT_BINARY_DIR}/${SUBMODULE_DIR}/${JSONFORTRAN}/include
+	)
 
 target_link_libraries(${PROJECT}
 	${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/liblapack.a
 	${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/librefblas.a
 	${COLORMAPPER}
 #	#${PNMIO}
-#	#jsonfortran-static
+	jsonfortran-static
 	)
 
