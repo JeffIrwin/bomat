@@ -516,10 +516,9 @@ subroutine load_eigenvalues(s, d, io)
 		! Progress bar
 		ist = i
 		ip = int(dble(np) * ist / neigen)
-		if (ip > ip0) then
-			! TODO: ip > ip0 + 1.  Don't skip characters
+		if (ip > ip0 .and. ip < np) then
+			write(*, '(a)', advance = 'no') repeat('=', ip - ip0)
 			ip0 = ip
-			write(*, '(a)', advance = 'no') '='
 		end if
 
 		i = min(i, neigen)
@@ -559,6 +558,8 @@ subroutine load_eigenvalues(s, d, io)
 		!$OMP end parallel do
 
 	end do
+
+	! TODO: finish any remainder progress
 
 	write(*, '(a)') '|'
 	write(*,*)
@@ -718,7 +719,7 @@ subroutine load_settings(s, io)
 	s%n = 8
 
 	! Size of population
-	s%np = 6
+	s%np = 3
 
 	! Generator sample set.  This is called the "population"
 	allocate(s%p(s%np))
@@ -734,11 +735,15 @@ subroutine load_settings(s, io)
 	!s%p(2) = cmplx(0.d0,  1.d0, kind = 8)
 	!s%p(3) = cmplx(0.d0, -1.d0, kind = 8)
 
-	s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	s%p(4:6) = -0.1 * s%p(1:3)
-	s%p = s%p * exp(ic * 0.5d0 * pi)
+	s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
+	s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
+	s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
+
+	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
+	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
+	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
+	!s%p(4:6) = -0.1 * s%p(1:3)
+	!s%p = s%p * exp(ic * 0.5d0 * pi)
 
 	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
 	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
@@ -783,7 +788,7 @@ subroutine load_settings(s, io)
 	!s%p(7) = cmplx(cos(1.2d1 * pi / 7.d0), sin(1.2d1 * pi / 7.d0), kind = 8)
 
 	!print *, "s%p(2) = ", s%p(2)
-	!print *, "s%p = ", s%p
+	print *, "s%p = ", s%p
 
 	! Non-zero pattern template
 
@@ -876,8 +881,8 @@ subroutine load_settings(s, io)
 
 	!s%colormap = "Inferno (matplotlib)"
 	!s%colormap = "Viridis (matplotlib)"
-	s%colormap = "Magma (matplotlib)"
-	!s%colormap = "Plasma (matplotlib)"
+	!s%colormap = "Magma (matplotlib)"
+	s%colormap = "Plasma (matplotlib)"
 
 	!s%colormap = "erdc_blue2green_BW"
 	!s%colormap = "Black, Blue and White"
