@@ -31,7 +31,7 @@ module mbomat
 		! User-facing input settings
 
 		character(len = :), allocatable :: f, fcolormap, colormap, fjson, &
-				fdata, fmeta
+				fdata, fmeta, fpng
 
 		integer :: n, np, nx, ny
 		integer(kind = 8) :: nsample
@@ -122,7 +122,7 @@ subroutine bomat(io)
 	if (io /= 0) return
 
 	! TODO: set output based on fjson
-	io = writepng(d%img, s%nx, s%ny, "scratch/bomat.png"//nullc)
+	io = writepng(d%img, s%nx, s%ny, s%fpng//nullc)
 	if (io /= 0) then
 		io = ERR_WRITEPNG
 		return
@@ -688,6 +688,7 @@ subroutine load_args(s, io)
 
 	s%fdata = s%f//".data"
 	s%fmeta = s%f//".meta"
+	s%fpng  = s%f//".png"
 
 	write(*,*) "Base filename      = """//s%f//""""
 	write(*,*)

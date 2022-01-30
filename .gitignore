@@ -2,6 +2,7 @@
 build/
 scratch/
 
-.data
-.meta
+*.data
+*.meta
+*.png
 

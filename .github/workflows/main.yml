@@ -64,6 +64,5 @@ jobs:
 
         #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
 
-        bash ./build.sh
-        bash ./run.sh
+        bash ./test.sh
 
