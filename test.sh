@@ -11,6 +11,5 @@ expectedoutdir=./examples/expected-output
 use_stdin="false"
 use_pushpop="false"
 
-# HACK
-source ./submodules/bat/test.sh || exit 0
+source ./submodules/bat/test.sh
 
