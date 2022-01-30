@@ -3,6 +3,10 @@ name: CI
 
 on: [push]
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
 
@@ -36,7 +40,6 @@ jobs:
         key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
 
     - name: Checkout submodules
-      shell: bash
       run: |
 
         git submodule update --init --recursive || echo "ignoring submodule error"
@@ -60,7 +63,6 @@ jobs:
         popd
 
     - name: Build and test
-      shell: bash
       run: |
 
         #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
