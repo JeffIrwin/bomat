@@ -3,9 +3,9 @@ name: CI
 
 on: [push]
 
-defaults:
-  run:
-    shell: bash
+#defaults:
+#  run:
+#    shell: bash
 
 jobs:
   test:
@@ -18,7 +18,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        #os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
+        #os: [ubuntu-latest]
 
     steps:
 
@@ -33,13 +35,14 @@ jobs:
         brew install gcc
         brew reinstall gcc
 
-        #- name: Cache LAPACK build
-        #  uses: actions/cache@v2
-        #  with:
-        #    path: ${{ env.LAPACK_DIR }}
-        #    key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
+    - name: Cache LAPACK build
+      uses: actions/cache@v2
+      with:
+        path: ${{ env.LAPACK_DIR }}
+        key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
 
     - name: Checkout submodules
+      shell: bash
       run: |
 
         git submodule update --init --recursive || echo "ignoring submodule error"
@@ -67,8 +70,8 @@ jobs:
 
         #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
 
-        pwd
-        ls
-        chmod +x ./test.sh
-        ./test.sh --no-diff
+        #pwd
+        #ls
+        #chmod +x ./test.sh
+        bash ./test.sh --no-diff
 
