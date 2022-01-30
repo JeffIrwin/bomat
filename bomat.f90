@@ -69,6 +69,8 @@ module mbomat
 
 	!********
 
+	type(bomat_settings) :: sg
+
 contains
 
 !===============================================================================
@@ -699,6 +701,80 @@ end subroutine load_args
 
 !===============================================================================
 
+subroutine bomat_json(json,p,finished)
+
+	! Parse bomat json schema, called iteratively from load_settings()
+
+	! Based on the traverser here:
+	!
+	!     https://github.com/jacobwilliams/json-fortran/issues/204
+	!
+
+	use json_module
+
+    class(json_core),intent(inout)      :: json
+    type(json_value),pointer,intent(in) :: p
+    logical(json_LK),intent(out)        :: finished
+
+    integer(json_IK) :: var_type
+    character(kind=json_CK,len=:),allocatable :: key, val
+    logical(json_LK) :: found
+
+	! JSON keys
+	character(len = *), parameter :: &
+		fcolormap_id = 'Colormap file', &
+		colormap_id  = 'Colormap name'
+
+    !get info about this variable:
+    call json%info(p,var_type=var_type,name=key)
+
+	!! This also prints the root, i.e. the json filename
+	!print *, 'name = "'//key//'"'
+
+    !!it must be a string named "name":
+    if (var_type==json_string) then
+    !if (var_type==json_string .and. key=='name') then
+
+		!print *, 'key = "'//key//'"'
+
+		!call json%info(p,val=val)
+		!call json%get(p,val=val)
+		!print *, 'val = "'//val//'"'
+
+		call json%get(p, '@', val)
+		!print *, 'val = "'//val//'"'
+
+		if (key == fcolormap_id) then
+			sg%fcolormap = val
+
+		else if (key == colormap_id) then
+			sg%colormap = val
+
+		else
+			write(*,*) 'Warning:  unknown JSON key'
+			write(*,*) 'Key  : "'//key//'"'
+			write(*,*) 'Value: "'//val//'"'
+			write(*,*)
+
+		end if
+
+        !call json%get(p,'@',str)               ! get original name
+        !call json%update(p,'@',new_name,found) ! change it
+        !write(error_unit,'(A)') str//' name changed to '//new_name
+        !icount = icount + 1
+
+    end if
+
+    !cleanup:
+    if (allocated(key)) deallocate(key)
+
+    !always false, since we want to traverse all nodes:
+    finished = .false.
+
+end subroutine bomat_json
+
+!===============================================================================
+
 subroutine load_settings(s, io)
 
 	! Load hard-coded settings.  TODO: json config file TBD, this API is not
@@ -712,14 +788,16 @@ subroutine load_settings(s, io)
 
 	!********
 
-	character(len = :), allocatable :: str
+	character(len = :), allocatable :: str, key
 
 	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
 
 	logical :: found
 
+	!type(json_core) :: json
 	type(json_file) :: json
+	type(json_value), pointer :: p
 
 	! Not actually thrown from here
 	io = 0
@@ -735,20 +813,44 @@ subroutine load_settings(s, io)
 	call json%initialize()
 	call json%load(filename = s%fjson)
 	if (json%failed()) then
-		write(*,*) 'Error'
+		write(*,*) 'Error:'
 		write(*,*) 'Could not load file "'//s%fjson//'"'
 		write(*,*)
+		call json%print_error_message()
 		io = ERR_LOAD_JSON
 		return
 	end if
 
 	call json%print()
+	write(*,*)
 
-	call json%get('Colormap file', str, found)
-	if (found) s%fcolormap = str
+	! Get root of JSON
+	!call json%get('$', p)
+	!call json%core%get_child(p, p)
 
-	call json%get('Colormap name', str, found)
-	if (found) s%colormap = str
+	!call json%get_next(p, p)
+	!call json%info(p, name=key)
+	!print *, 'key = "'//key//'"'
+
+	! Traverse callback cannot take extra args.  Must pass settings s as
+	! a global variable
+	sg = s
+	call json%traverse(bomat_json)
+	s = sg
+
+	!print *, 's%fcolormap = ', s%fcolormap
+
+	!! TODO: finalize the global object
+	!call destroy(sg)
+
+	!call json%get('Colormap file', str, found)
+	!if (found) s%fcolormap = str
+
+	!call json%get('Colormap name', str, found)
+	!if (found) s%colormap = str
+
+	!! TODO
+	!stop
 
 	! Size of matrices
 	s%n = 8
@@ -823,7 +925,7 @@ subroutine load_settings(s, io)
 	!s%p(7) = cmplx(cos(1.2d1 * pi / 7.d0), sin(1.2d1 * pi / 7.d0), kind = 8)
 
 	!print *, "s%p(2) = ", s%p(2)
-	print *, "s%p = ", s%p
+	!print *, "s%p = ", s%p
 
 	! Non-zero pattern template
 

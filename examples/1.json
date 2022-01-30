@@ -1,5 +1,11 @@
 {
+
+# This is a comment (non-standard JSON extension)
+
 	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-	"#Colormap name": "Magma (matplotlib)",
+	"Coormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+
+#	"Colormap name": "Magma (matplotlib)"
 	"Colormap name": "Viridis (matplotlib)"
+
 }
