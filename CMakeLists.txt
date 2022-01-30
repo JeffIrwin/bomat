@@ -34,7 +34,7 @@ set(LAPACK_DIR ${SUBMODULE_DIR}/lapack)
 #add_subdirectory(${SUBMODULE_DIR}/${JSONFORTRAN})
 add_subdirectory(${SUBMODULE_DIR}/${COLORMAPPER})
 
-add_executable(${PROJECT} main.f90 colormapper_wrapper.cpp)
+add_executable(${PROJECT} bomat.f90 colormapper_wrapper.cpp)
 
 #include_directories(
 ##	${CMAKE_CURRENT_BINARY_DIR}/${SUBMODULE_DIR}/${PNMIO}
