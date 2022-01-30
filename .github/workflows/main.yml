@@ -75,3 +75,9 @@ jobs:
         #chmod +x ./test.sh
         bash ./test.sh --no-diff
 
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: bomat-0-0-1
+        path: tests/*.png
+
