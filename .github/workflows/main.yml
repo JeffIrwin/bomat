@@ -33,11 +33,11 @@ jobs:
         brew install gcc
         brew reinstall gcc
 
-    - name: Cache LAPACK build
-      uses: actions/cache@v2
-      with:
-        path: ${{ env.LAPACK_DIR }}
-        key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
+        #- name: Cache LAPACK build
+        #  uses: actions/cache@v2
+        #  with:
+        #    path: ${{ env.LAPACK_DIR }}
+        #    key: lapack-${{ matrix.os }}-${{ env.LAPACK_VERS }}
 
     - name: Checkout submodules
       run: |
