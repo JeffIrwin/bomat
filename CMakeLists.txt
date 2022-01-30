@@ -35,12 +35,13 @@ set(LAPACK_DIR ${SUBMODULE_DIR}/lapack)
 add_subdirectory(${SUBMODULE_DIR}/${COLORMAPPER})
 
 add_executable(${PROJECT}
-	${CMAKE_CURRENT_SOURCE_DIR}/bomat.f90
-	${CMAKE_CURRENT_SOURCE_DIR}/colormapper_wrapper.cpp
+	./bomat.f90
+	./colormapper_wrapper.cpp
 	)
 
 message("")
 message("CMAKE_SOURCE_DIR = ${CMAKE_SOURCE_DIR}")
+message("CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}")
 message("")
 
 #include_directories(
