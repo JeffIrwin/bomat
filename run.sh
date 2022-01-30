@@ -4,7 +4,7 @@ pushd .
 
 date
 
-time ./build/bomat.exe || exit -1
+time ./build/bomat || exit -1
 
 popd
 
