@@ -67,13 +67,7 @@ jobs:
 
     - name: Build and test
       run: |
-
-        #gfortran main.f90 -o main ${{ env.LAPACK_DIR }}/liblapack.a ${{ env.LAPACK_DIR }}/librefblas.a
-
-        #pwd
-        #ls
-        #chmod +x ./test.sh
-        bash ./test.sh --no-diff
+        bash ./test.sh
 
     - name: Upload artifact
       uses: actions/upload-artifact@v2
