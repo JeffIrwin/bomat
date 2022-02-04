@@ -143,6 +143,8 @@ subroutine get_eigenvalues(s, d, io)
 
 	! Calculate eigenvalues.  If running with "-e", export them to a .data file
 
+	!use iso_fortran_env
+
 	type(bomat_settings), intent(in) :: s
 
 	type(bomat_data), intent(out) :: d
@@ -234,6 +236,7 @@ subroutine get_eigenvalues(s, d, io)
 		if (ip > ip0) then
 			ip0 = ip
 			write(*, '(a)', advance = 'no') '='
+			!flush(output_unit)
 		end if
 		!$OMP end critical
 

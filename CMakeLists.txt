@@ -6,19 +6,15 @@ set(CMAKE_Fortran_COMPILER "ifort")
 
 set(CMAKE_C_COMPILER "icc")
 set(CMAKE_CXX_COMPILER "icpc")
-set(CMAKE_EXE_LINKER "ifort")
-set(CMAKE_C_LINK_EXECUTABLE "ifort")
-set(CMAKE_LINKER "ifort")
 
 set(PROJECT bomat)
 
 project(${PROJECT} Fortran CXX)
-#project(${PROJECT} Fortran)
 
-# TODO:  build LAPACK if necessary via make
+# TODO:  build LAPACK if necessary via make for gfortran (no need for ifort)
 
 # TODO: remove uninit flag.  It's for a gfortran bug
-set(CMAKE_Fortran_FLAGS "-W:all -W:extra -qopenmp -qmkl -fPIC")
+set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
 #set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -Wno-tabs -Wno-maybe-uninitialized")
 
 set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")
@@ -55,6 +51,10 @@ add_executable(${PROJECT}
 	colormapper_wrapper.cpp
 	)
 
+# This tells cmake to use the fortran compiler as the linker.  See:
+#
+#     https://stackoverflow.com/questions/40767212/use-fortran-linker-in-cmake-mixed-language-project
+#
 set_property(TARGET ${PROJECT} PROPERTY LINKER_LANGUAGE Fortran)
 
 include_directories(
