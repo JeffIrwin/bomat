@@ -20,9 +20,10 @@ module mbomat
 	integer, parameter :: nrgb = 3
 
 	integer, parameter :: &
-			ERR_WRITEPNG = -1, &
-			ERR_COLORMAP = -2, &
-			ERR_CMD_ARGS = -3
+			ERR_LOAD_JSON = -4, &
+			ERR_CMD_ARGS  = -3, &
+			ERR_COLORMAP  = -2, &
+			ERR_WRITEPNG  = -1
 
 	!********
 
@@ -31,7 +32,7 @@ module mbomat
 		! User-facing input settings
 
 		character(len = :), allocatable :: f, fcolormap, colormap, fjson, &
-				fdata, fmeta
+				fdata, fmeta, fpng
 
 		integer :: n, np, nx, ny
 		integer(kind = 8) :: nsample
@@ -67,6 +68,8 @@ module mbomat
 	end type bomat_data
 
 	!********
+
+	type(bomat_settings) :: sg
 
 contains
 
@@ -122,7 +125,7 @@ subroutine bomat(io)
 	if (io /= 0) return
 
 	! TODO: set output based on fjson
-	io = writepng(d%img, s%nx, s%ny, "scratch/bomat.png"//nullc)
+	io = writepng(d%img, s%nx, s%ny, s%fpng//nullc)
 	if (io /= 0) then
 		io = ERR_WRITEPNG
 		return
@@ -516,10 +519,9 @@ subroutine load_eigenvalues(s, d, io)
 		! Progress bar
 		ist = i
 		ip = int(dble(np) * ist / neigen)
-		if (ip > ip0) then
-			! TODO: ip > ip0 + 1.  Don't skip characters
+		if (ip > ip0 .and. ip < np) then
+			write(*, '(a)', advance = 'no') repeat('=', ip - ip0)
 			ip0 = ip
-			write(*, '(a)', advance = 'no') '='
 		end if
 
 		i = min(i, neigen)
@@ -559,6 +561,8 @@ subroutine load_eigenvalues(s, d, io)
 		!$OMP end parallel do
 
 	end do
+
+	! TODO: finish any remainder progress
 
 	write(*, '(a)') '|'
 	write(*,*)
@@ -688,6 +692,7 @@ subroutine load_args(s, io)
 
 	s%fdata = s%f//".data"
 	s%fmeta = s%f//".meta"
+	s%fpng  = s%f//".png"
 
 	write(*,*) "Base filename      = """//s%f//""""
 	write(*,*)
@@ -696,10 +701,222 @@ end subroutine load_args
 
 !===============================================================================
 
+subroutine load_bomat_json(json, p, finished)
+
+	! Parse the bomat json config file, called iteratively from load_settings()
+	! via the traverse callback
+
+	! Based on the traverser here:
+	!
+	!     https://github.com/jacobwilliams/json-fortran/issues/204
+	!
+
+	use json_module
+
+	class(json_core), intent(inout)       :: json
+	type(json_value), pointer, intent(in) :: p
+	logical(json_LK), intent(out)         :: finished
+
+	!********
+
+	character(kind=json_CK, len=:), allocatable :: key, sval
+
+	integer(json_IK) :: var_type, ival, ncount, ij
+	integer :: i, j, k, nnonzero
+	integer, allocatable :: template(:), t2(:,:)
+
+	logical(json_LK) :: found
+
+	real(json_RK) :: rvalx, rvaly
+
+	type(json_value), pointer :: pc
+
+	! JSON keys
+	character(len = *), parameter :: &
+		population_id = 'Population'     , &
+		template_id   = 'Template matrix', &
+		samples_id    = 'Samples'        , &
+		img_size_id   = 'Image size'     , &
+		fcolormap_id  = 'Colormap file'  , &
+		colormap_id   = 'Colormap name'
+
+	! Get the name of the key and the type of its value
+	call json%info(p, name = key, var_type = var_type)
+
+	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
+
+	! String values
+	if (var_type == json_string) then
+
+		call json%get(p, '@', sval)
+
+		!print *, 'key = "'//key//'"'
+		!print *, 'val = "'//sval//'"'
+
+		if (key == fcolormap_id) then
+
+			! Colormap file
+			sg%fcolormap = sval
+
+		else if (key == colormap_id) then
+
+			! Colormap name
+			sg%colormap = sval
+
+		else if (key /= "") then
+
+			! TODO: can this be done generically for any type?
+			write(*,*) 'Warning:  unknown string JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			write(*,*) 'Value  : "'//sval//'"'
+			write(*,*)
+
+		end if
+
+	! Integer values
+	else if (var_type == json_integer) then
+
+		call json%get(p, '@', ival)
+
+		!print *, 'key = "'//key//'"'
+		!print *, 'val = ', ival
+
+		if (key == samples_id) then
+
+			! Number of random samples to take
+			sg%nsample = ival
+
+		else if (key == img_size_id) then
+
+			! Image size.  In a 2-pass run, one of these is automatically
+			! resized later for an appropriate aspect ratio
+			sg%nx = ival
+			sg%ny = ival
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown integer JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			write(*,*) 'Value  : ', ival
+			write(*,*)
+
+		end if
+
+	else if (var_type == json_array) then
+
+		ncount = json%count(p)
+
+		!print *, 'array key = "'//key//'"'
+		!print *, 'ncount = ', ncount
+		!print *, ''
+
+		if (key == population_id) then
+
+			! Generator sample set.  This is called the "population"
+
+			! Size of population (real + imaginary pairs)
+			sg%np = ncount / 2
+
+			allocate(sg%p(sg%np))
+
+			do ij = 0, sg%np - 1
+
+				call json%get_child(p, ij*2 + 1, pc, found)
+				call json%get(pc, '@', rvalx)
+				call json%get_child(p, ij*2 + 2, pc, found)
+				call json%get(pc, '@', rvaly)
+
+				sg%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
+
+			end do
+
+			!print *, 'sg%p = ', sg%p
+
+		else if (key == template_id) then
+
+			! Non-zero pattern template matrix
+
+			! Size of matrices
+			!
+			! TODO: this is dangerous.  There's no Fortran integer sqrt
+			sg%n = int(sqrt(dble(ncount)))
+
+			!print *, 'sg%n = ', sg%n
+
+			! TODO
+			if (sg%n * sg%n /= ncount) then
+				write(*,*) 'Error: matrix is not square'
+			end if
+
+			allocate(template(sg%n * sg%n))
+
+			do ij = 1, ncount
+				call json%get_child(p, ij, pc, found)
+				call json%get(pc, '@', ival)
+				!print *, 'ival = ', ival
+				template(ij) = ival
+			end do
+
+			! Number of non-zeros in matrix
+			nnonzero = count(template /= 0)
+
+			allocate(t2(sg%n, sg%n))
+			t2 = reshape(template, [sg%n, sg%n])
+			deallocate(template)
+
+			! Indices of non-zeros
+			allocate(sg%inz(2, nnonzero))
+
+			! Mark non-zero locations from template 1/0's matrix
+			k = 0
+			do i = 1, sg%n
+			do j = 1, sg%n
+
+				! Note the transpose from row-major template to Fortran default
+				! column-major
+				if (t2(j, i) /= 0) then
+					k = k + 1
+					sg%inz(:, k) = [i, j]
+				end if
+
+			end do
+			end do
+			deallocate(t2)
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown array JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			!write(*,*) 'Value  : "'//sval//'"'
+			write(*,*)
+
+		end if
+
+		! TODO: if possible, update pointer p to tail of array, so this callback
+		! doesn't reiterate through each element individually
+		!
+		! json_get_tail() ?
+
+	else if (key /= "" .and. key /= sg%fjson) then
+
+		write(*,*) 'Warning:  unknown JSON key with unexpected type'
+		write(*,*) 'Key    :"'//key//'"'
+		write(*,*) 'Type   :', var_type
+		write(*,*)
+
+	end if
+
+	! always false, since we want to traverse all nodes:
+	finished = .false.
+
+end subroutine load_bomat_json
+
+!===============================================================================
+
 subroutine load_settings(s, io)
 
 	! Load hard-coded settings.  TODO: json config file TBD, this API is not
 	! stable
+
+	use json_module
 
 	type(bomat_settings), intent(inout) :: s
 
@@ -707,24 +924,69 @@ subroutine load_settings(s, io)
 
 	!********
 
-	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
+
+	type(json_file) :: json
 
 	! Not actually thrown from here
 	io = 0
 
-	! Size of matrices
-	s%n = 8
+	write(*,*) 'Loading json file "'//s%fjson//'" ...'
+	write(*,*)
 
-	! Size of population
-	s%np = 6
+	! Set defaults. TODO pick default values and error out if required JSON keys
+	! are not defined.
+	s%n = 0
+	s%fcolormap = ""
+	s%colormap  = ""
 
-	! Generator sample set.  This is called the "population"
-	allocate(s%p(s%np))
+	call json%initialize()
+	call json%load(filename = s%fjson)
+	if (json%failed()) then
+		write(*,*) 'Error:'
+		write(*,*) 'Could not load file "'//s%fjson//'"'
+		write(*,*)
+		call json%print_error_message()
+		io = ERR_LOAD_JSON
+		return
+	end if
 
-	s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
-	s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
+	! TODO:  make a custom settings printer, with population and template neatly
+	! formatted instead of 1 number per line
+	call json%print()
+	write(*,*)
+
+	! Traverse callback cannot take extra args.  Must pass settings s as
+	! a global variable
+	sg = s
+	call json%traverse(load_bomat_json)
+	s = sg
+
+	!print *, 'size(sg%inz) = ', size(sg%inz)
+	!print *, 'size(s%inz)  = ', size(s%inz)
+	!print *, 's%fcolormap = ', s%fcolormap
+
+	!! TODO: finalize the global object
+	!call destroy(sg)
+
+	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
+	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
+
+	! Image bounds in complex plane.  Careful with aspect ratio.  These are
+	! reset automatically later in a 2-pass run.  Check thesis.  Is ~sqrt(n)
+	! better?
+	s%xmin = -3.0
+	s%xmax =  3.0
+	s%ymin = -3.0
+	s%ymax =  3.0
+
+
+
+
+
+	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
+	!s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
+	!s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
 
 	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
 	!s%p(1) = cmplx(0.5d0, 0.d0, kind = 8)
@@ -733,11 +995,15 @@ subroutine load_settings(s, io)
 	!s%p(2) = cmplx(0.d0,  1.d0, kind = 8)
 	!s%p(3) = cmplx(0.d0, -1.d0, kind = 8)
 
-	s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	s%p(4:6) = -0.1 * s%p(1:3)
-	s%p = s%p * exp(ic * 0.5d0 * pi)
+	!s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
+	!s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
+	!s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
+
+	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
+	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
+	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
+	!s%p(4:6) = -0.1 * s%p(1:3)
+	!s%p = s%p * exp(ic * 0.5d0 * pi)
 
 	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
 	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
@@ -781,13 +1047,6 @@ subroutine load_settings(s, io)
 	!s%p(6) = cmplx(cos( 1.d1 * pi / 7.d0), sin( 1.d1 * pi / 7.d0), kind = 8)
 	!s%p(7) = cmplx(cos(1.2d1 * pi / 7.d0), sin(1.2d1 * pi / 7.d0), kind = 8)
 
-	!print *, "s%p(2) = ", s%p(2)
-	!print *, "s%p = ", s%p
-
-	! Non-zero pattern template
-
-	allocate(template(s%n * s%n))
-
 	!! Upper triangle, main diagonal, and first band below diagonal
 	!template = [                &
 	!	1, 1, 1, 1, 1, 1, 1, 1, &
@@ -800,20 +1059,17 @@ subroutine load_settings(s, io)
 	!	0, 0, 0, 0, 0, 0, 1, 1  &
 	!	]
 
-	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
-	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
-
-	! 8x8
-	template = [                &
-		1, 1, 0, 0, 0, 0, 0, 0, &
-		1, 1, 1, 0, 0, 0, 0, 0, &
-		0, 1, 1, 1, 0, 0, 0, 0, &
-		0, 0, 1, 1, 1, 0, 0, 0, &
-		0, 0, 0, 1, 1, 1, 0, 0, &
-		0, 0, 0, 0, 1, 1, 1, 0, &
-		0, 0, 0, 0, 0, 1, 1, 1, &
-		0, 0, 0, 0, 0, 0, 1, 1  &
-		]
+	!! 8x8
+	!template = [                &
+	!	1, 1, 0, 0, 0, 0, 0, 0, &
+	!	1, 1, 1, 0, 0, 0, 0, 0, &
+	!	0, 1, 1, 1, 0, 0, 0, 0, &
+	!	0, 0, 1, 1, 1, 0, 0, 0, &
+	!	0, 0, 0, 1, 1, 1, 0, 0, &
+	!	0, 0, 0, 0, 1, 1, 1, 0, &
+	!	0, 0, 0, 0, 0, 1, 1, 1, &
+	!	0, 0, 0, 0, 0, 0, 1, 1  &
+	!	]
 
 	!! 7x7
 	!template = [                &
@@ -867,15 +1123,12 @@ subroutine load_settings(s, io)
 	!! Fully-dense
 	!template = 1
 
-	! Number of random samples to take
-	s%nsample = 1000000
-
-	! Colormap file and name
-	s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
+	!! Colormap file and name
+	!s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
 
 	!s%colormap = "Inferno (matplotlib)"
 	!s%colormap = "Viridis (matplotlib)"
-	s%colormap = "Magma (matplotlib)"
+	!s%colormap = "Magma (matplotlib)"
 	!s%colormap = "Plasma (matplotlib)"
 
 	!s%colormap = "erdc_blue2green_BW"
@@ -903,72 +1156,6 @@ subroutine load_settings(s, io)
 
 	!! Pretty ugly
 	!s%colormap = "cyan-magenta"
-
-	! Image size
-
-	!s%nx = 3840
-	!s%nx = 1920
-	s%nx = 1080
-	!s%nx = 720
-
-	s%ny = s%nx
-	!s%ny = 4352
-	!s%ny = 4292
-
-	! Image bounds in complex plane.  Careful with aspect ratio
-
-	s%xmin = -2.5
-	s%xmax =  2.5
-	s%ymin = -2.3
-	s%ymax =  2.7
-
-	!s%xmin = -2.73
-	!s%xmax =  3.23
-	!s%ymin = -2.88
-	!s%ymax =  2.88
-
-	!s%xmin = -3.0
-	!s%xmax =  3.0
-	!s%ymin = -3.0
-	!s%ymax =  3.0
-
-	!s%xmin = -3.9
-	!s%xmax =  3.9
-	!s%ymin = -3.9
-	!s%ymax =  3.9
-
-	!********
-
-	! Do some quick basic processing on some of the inputs
-
-	! Mark non-zero locations from template 1/0's matrix
-
-	! Number of non-zeros in matrix
-	nnonzero = count(template /= 0)
-
-	!print *, "nnonzero = ", nnonzero
-
-	allocate(t2(s%n, s%n))
-	t2 = reshape(template, [s%n, s%n])
-	deallocate(template)
-
-	! Indices of non-zeros
-	allocate(s%inz(2, nnonzero))
-
-	k = 0
-	do i = 1, s%n
-	do j = 1, s%n
-
-		! Note the transpose from row-major template to Fortran default
-		! column-major
-		if (t2(j, i) /= 0) then
-			k = k + 1
-			s%inz(:, k) = [i, j]
-		end if
-
-	end do
-	end do
-	deallocate(t2)
 
 end subroutine load_settings
 
