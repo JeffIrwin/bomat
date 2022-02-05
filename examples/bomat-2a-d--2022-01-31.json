@@ -1,0 +1,35 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		-2  ,  1,
+		 2  ,  1
+	],
+
+	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
+	# from population.  This JSON array is rank-1, but it is reshaped in
+	# a row-major sense into a rank-2 matrix
+	"Template matrix":
+	[
+		0, 1, 1, 0, 0, 0, 0, 0,
+		1, 0, 1, 1, 0, 0, 0, 0,
+		1, 1, 0, 1, 1, 0, 0, 0,
+		0, 0, 1, 0, 1, 1, 0, 0,
+		0, 0, 1, 1, 0, 1, 1, 0,
+		0, 0, 0, 0, 1, 0, 1, 1,
+		0, 0, 0, 0, 1, 1, 0, 1,
+		0, 0, 0, 0, 0, 0, 1, 0
+	],
+
+	"Samples": 100000000,
+	"Image size": 3840,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Viridis (matplotlib)"
+	"Colormap name": "Blue Orange (divergent)"
+
+}

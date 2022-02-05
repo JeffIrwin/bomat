@@ -67,7 +67,8 @@ jobs:
 
     - name: Build and test
       run: |
-        bash ./test.sh
+        #bash ./test.sh
+        bash ./test.sh --no-diff
 
     - name: Upload artifact
       uses: actions/upload-artifact@v2

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-pushd .
-
 date
 
-time ./build/bomat || exit -1
+# 1st pass: calculate eigenvalues
+time ./build/bomat tests/1.json -e
 
-popd
+# 2nd pass: load eigenvalues from 1st pass and draw plot
+time ./build/bomat tests/1.json -p
 

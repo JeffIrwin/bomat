@@ -1,0 +1,41 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		 0        ,  1  ,
+		-0.8660254, -0.5,
+		 0.8660254, -0.5,
+		 0        ,  2
+	],
+
+	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
+	# from population.  This JSON array is rank-1, but it is reshaped in
+	# a row-major sense into a rank-2 matrix
+	"Template matrix":
+	[
+		1, 1, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 0, 0, 0, 0, 0,
+		0, 1, 1, 1, 0, 0, 0, 0,
+		0, 0, 1, 1, 1, 0, 0, 0,
+		0, 0, 0, 1, 1, 1, 0, 0,
+		0, 0, 0, 0, 1, 1, 1, 0,
+		0, 0, 0, 0, 0, 1, 1, 1,
+		0, 0, 0, 0, 0, 0, 1, 1
+	],
+
+	"Samples": 100000000,
+	"Image size": 3840,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Magma (matplotlib)"
+#	"Colormap name": "Viridis (matplotlib)"
+	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Blue Orange (divergent)"
+
+#	"Colormap file": "custom-maps.json",
+#	"Colormap name": "cyan-magenta"
+
+}
