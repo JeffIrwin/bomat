@@ -675,8 +675,6 @@ subroutine load_args(s, io)
 
 	io = 0
 
-	! TODO: use json key parameters in help text
-
 	help_short = "" &
 			//"Usage: "//me//" ["//id_h//"] ["//id_plot//"] ["//id_eig//"] " &
 			//id_file//newline &
@@ -700,7 +698,7 @@ subroutine load_args(s, io)
 			//'	# This is a comment (non-standard JSON extension)'//newline &
 			//newline &
 			//'	# Complex numbers'//newline &
-			//'	"Population":'//newline &
+			//'	"'//population_id//'":'//newline &
 			//'	['//newline &
 			//'		# Re, Im'//newline &
 			//'		 0        ,  1  ,'//newline &
@@ -711,7 +709,7 @@ subroutine load_args(s, io)
 			//'	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly'//newline &
 			//'	# from population.  This JSON array is rank-1, but it is reshaped in'//newline &
 			//'	# a row-major sense into a rank-2 matrix'//newline &
-			//'	"Template matrix":'//newline &
+			//'	"'//template_id//'":'//newline &
 			//'	['//newline &
 			//'		1, 1, 0, 0, 0, 0, 0, 0,'//newline &
 			//'		1, 1, 1, 0, 0, 0, 0, 0,'//newline &
@@ -723,11 +721,11 @@ subroutine load_args(s, io)
 			//'		0, 0, 0, 0, 0, 0, 1, 1'//newline &
 			//'	],'//newline &
 			//newline &
-			//'	"Samples": 1000000,'//newline &
-			//'	"Image size": 1920,'//newline &
+			//'	"'//samples_id//'": 1000000,'//newline &
+			//'	"'//img_size_id//'": 1920,'//newline &
 			//newline &
-			//'	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",'//newline &
-			//'	"Colormap name": "Magma (matplotlib)"'//newline &
+			//'	"'//fcolormap_id//'": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",'//newline &
+			//'	"'//colormap_id//'": "Magma (matplotlib)"'//newline &
 			//newline &
 			//'}'//newline &
 			//newline &
