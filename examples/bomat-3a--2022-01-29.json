@@ -4,9 +4,9 @@
 	"Population":
 	[
 		# Re, Im
-		1   , -1,
-		1   ,  0,
-		1   ,  1
+		 1   ,  0,
+		-1   ,  0,
+		 0   ,  0.5
 	],
 
 	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
@@ -24,11 +24,15 @@
 		0, 0, 0, 0, 0, 0, 1, 1
 	],
 
-	"Samples": 100000000,
+	"Samples": 1000000,
+	"Image size": 1920,
 
-	"Image size": 3840,
+#	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Blue Orange (divergent)"
 
-	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-	"Colormap name": "Plasma (matplotlib)"
+	"Colormap file": "custom-maps.json",
+	"Colormap name": "bisexual"
 
 }

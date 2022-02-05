@@ -42,14 +42,8 @@ module mbomat
 
 		double precision :: xmin, xmax, ymin, ymax
 
-		! TODO: change arg_all default?  i.e. require -a flag?
-		!
-		!   - change "-e" to on by default.  it's painful to forget it.  add an
-		!     other arg to turn it off during a 1-pass run.  rename to "export"
-		!     instead of "eig"
-		!
-		logical :: arg_all = .true., arg_eig = .false., arg_plot = .false., &
-				arg_help = .false.
+		logical :: arg_in_core = .false., arg_eig = .false., &
+				arg_plot = .false., arg_help = .false.
 
 	end type bomat_settings
 
@@ -68,8 +62,6 @@ module mbomat
 	end type bomat_data
 
 	!********
-
-	type(bomat_settings) :: sg
 
 contains
 
@@ -107,24 +99,26 @@ subroutine bomat(io)
 		return
 	end if
 
-	! Load eigenvalues from previous run or calculate from scratch?
-	if (s%arg_plot) then
+	! Calculate eigenvalues from scratch?
+	if (.not. s%arg_plot) then
+
+		call calc_eigenvalues(s, d, io)
+		if (io /= 0 .or. s%arg_eig) return
+
+	end if
+
+	! Load eigenvalues from disk from a previous calc_eigenvalues() call?
+	if (s%arg_plot .or. .not. s%arg_in_core) then
 
 		!print *, 'calling load_eigenvalues ...'
 		call load_eigenvalues(s, d, io)
 		if (io /= 0) return
-
-	else
-
-		call get_eigenvalues(s, d, io)
-		if (io /= 0 .or. s%arg_eig) return
 
 	end if
 
 	call draw_plot(s, d, io)
 	if (io /= 0) return
 
-	! TODO: set output based on fjson
 	io = writepng(d%img, s%nx, s%ny, s%fpng//nullc)
 	if (io /= 0) then
 		io = ERR_WRITEPNG
@@ -139,9 +133,10 @@ end subroutine bomat
 
 !===============================================================================
 
-subroutine get_eigenvalues(s, d, io)
+subroutine calc_eigenvalues(s, d, io)
 
-	! Calculate eigenvalues.  If running with "-e", export them to a .data file
+	! Calculate eigenvalues.  Unless running with in-core "-i" flag, export them
+	! to a .data file
 
 	type(bomat_settings), intent(in) :: s
 
@@ -288,7 +283,7 @@ subroutine get_eigenvalues(s, d, io)
 
 					!$OMP end critical
 
-					if (s%arg_eig) then
+					if (.not. s%arg_in_core) then
 
 						!$OMP critical
 						write(id) wx, wy
@@ -343,7 +338,7 @@ subroutine get_eigenvalues(s, d, io)
 	!write(*,*) 'Im in [', wymin - wmargin*dy, ', ', wymax + wmargin*dy, ']'
 	!write(*,*)
 
-end subroutine get_eigenvalues
+end subroutine calc_eigenvalues
 
 !=======================================================================
 
@@ -606,7 +601,7 @@ subroutine load_args(s, io)
 	character(len = *), parameter :: &
 			id_h    = "-h"    , &
 			id_help = "--help", &
-			id_all  = "-a"    , &
+			id_inco = "-i"    , &
 			id_plot = "-p"    , &
 			id_eig  = "-e"
 
@@ -628,6 +623,47 @@ subroutine load_args(s, io)
 			//id_h//", "//id_help//"  Show this help message and exit"//newline &
 			//id_eig //"          Calculate and export eigenvalues without plotting"//newline &
 			//id_plot//"          Plot eigenvalues from previous job"//newline &
+			//newline &
+			//"Sample FILE.JSON contents are like this:"//newline &
+			//'{'//newline &
+			//newline &
+			//'	# This is a comment (non-standard JSON extension)'//newline &
+			//newline &
+			//'	# Complex numbers'//newline &
+			//'	"Population":'//newline &
+			//'	['//newline &
+			//'		# Re, Im'//newline &
+			//'		 0        ,  1  ,'//newline &
+			//'		-0.8660254, -0.5,'//newline &
+			//'		 0.8660254, -0.5'//newline &
+			//'	],'//newline &
+			//newline &
+			//'	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly'//newline &
+			//'	# from population.  This JSON array is rank-1, but it is reshaped in'//newline &
+			//'	# a row-major sense into a rank-2 matrix'//newline &
+			//'	"Template matrix":'//newline &
+			//'	['//newline &
+			//'		1, 1, 0, 0, 0, 0, 0, 0,'//newline &
+			//'		1, 1, 1, 0, 0, 0, 0, 0,'//newline &
+			//'		0, 1, 1, 1, 0, 0, 0, 0,'//newline &
+			//'		0, 0, 1, 1, 1, 0, 0, 0,'//newline &
+			//'		0, 0, 0, 1, 1, 1, 0, 0,'//newline &
+			//'		0, 0, 0, 0, 1, 1, 1, 0,'//newline &
+			//'		0, 0, 0, 0, 0, 1, 1, 1,'//newline &
+			//'		0, 0, 0, 0, 0, 0, 1, 1'//newline &
+			//'	],'//newline &
+			//newline &
+			//'	"Samples": 1000000,'//newline &
+			//'	"Image size": 1920,'//newline &
+			//newline &
+			//'	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",'//newline &
+			//'	"Colormap name": "Magma (matplotlib)"'//newline &
+			//newline &
+			//'}'//newline &
+			//newline &
+			//"For more, see:"//newline &
+			//newline &
+			//"	https://github.com/JeffIrwin/bomat"//newline &
 			//newline
 
 	argc = command_argument_count()
@@ -645,8 +681,11 @@ subroutine load_args(s, io)
 		call get_command_argument(i, argv)
 
 		! Optional arguments
-		if (argv == id_all) then
-			s%arg_all = .true.
+		if (argv == id_inco) then
+
+			! TODO: not documented and not recommended.  Plot size/bounds cannot
+			! be controlled (yet)
+			s%arg_in_core = .true.
 
 		else if (argv == id_plot) then
 			s%arg_plot = .true.
@@ -674,7 +713,6 @@ subroutine load_args(s, io)
 		end if
 	end do
 
-	!print *, 'arg_all  = ', s%arg_all
 	!print *, 'arg_eig  = ', s%arg_eig
 	!print *, 'arg_plot = ', s%arg_plot
 	!print *, 'fjson    = ', s%fjson
@@ -701,220 +739,9 @@ end subroutine load_args
 
 !===============================================================================
 
-subroutine load_bomat_json(json, p, finished)
-
-	! Parse the bomat json config file, called iteratively from load_settings()
-	! via the traverse callback
-
-	! Based on the traverser here:
-	!
-	!     https://github.com/jacobwilliams/json-fortran/issues/204
-	!
-
-	use json_module
-
-	class(json_core), intent(inout)       :: json
-	type(json_value), pointer, intent(in) :: p
-	logical(json_LK), intent(out)         :: finished
-
-	!********
-
-	character(kind=json_CK, len=:), allocatable :: key, sval
-
-	integer(json_IK) :: var_type, ival, ncount, ij
-	integer :: i, j, k, nnonzero
-	integer, allocatable :: template(:), t2(:,:)
-
-	logical(json_LK) :: found
-
-	real(json_RK) :: rvalx, rvaly
-
-	type(json_value), pointer :: pc
-
-	! JSON keys
-	character(len = *), parameter :: &
-		population_id = 'Population'     , &
-		template_id   = 'Template matrix', &
-		samples_id    = 'Samples'        , &
-		img_size_id   = 'Image size'     , &
-		fcolormap_id  = 'Colormap file'  , &
-		colormap_id   = 'Colormap name'
-
-	! Get the name of the key and the type of its value
-	call json%info(p, name = key, var_type = var_type)
-
-	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
-
-	! String values
-	if (var_type == json_string) then
-
-		call json%get(p, '@', sval)
-
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = "'//sval//'"'
-
-		if (key == fcolormap_id) then
-
-			! Colormap file
-			sg%fcolormap = sval
-
-		else if (key == colormap_id) then
-
-			! Colormap name
-			sg%colormap = sval
-
-		else if (key /= "") then
-
-			! TODO: can this be done generically for any type?
-			write(*,*) 'Warning:  unknown string JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
-
-		end if
-
-	! Integer values
-	else if (var_type == json_integer) then
-
-		call json%get(p, '@', ival)
-
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = ', ival
-
-		if (key == samples_id) then
-
-			! Number of random samples to take
-			sg%nsample = ival
-
-		else if (key == img_size_id) then
-
-			! Image size.  In a 2-pass run, one of these is automatically
-			! resized later for an appropriate aspect ratio
-			sg%nx = ival
-			sg%ny = ival
-
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown integer JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : ', ival
-			write(*,*)
-
-		end if
-
-	else if (var_type == json_array) then
-
-		ncount = json%count(p)
-
-		!print *, 'array key = "'//key//'"'
-		!print *, 'ncount = ', ncount
-		!print *, ''
-
-		if (key == population_id) then
-
-			! Generator sample set.  This is called the "population"
-
-			! Size of population (real + imaginary pairs)
-			sg%np = ncount / 2
-
-			allocate(sg%p(sg%np))
-
-			do ij = 0, sg%np - 1
-
-				call json%get_child(p, ij*2 + 1, pc, found)
-				call json%get(pc, '@', rvalx)
-				call json%get_child(p, ij*2 + 2, pc, found)
-				call json%get(pc, '@', rvaly)
-
-				sg%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
-
-			end do
-
-			!print *, 'sg%p = ', sg%p
-
-		else if (key == template_id) then
-
-			! Non-zero pattern template matrix
-
-			! Size of matrices
-			!
-			! TODO: this is dangerous.  There's no Fortran integer sqrt
-			sg%n = int(sqrt(dble(ncount)))
-
-			!print *, 'sg%n = ', sg%n
-
-			! TODO
-			if (sg%n * sg%n /= ncount) then
-				write(*,*) 'Error: matrix is not square'
-			end if
-
-			allocate(template(sg%n * sg%n))
-
-			do ij = 1, ncount
-				call json%get_child(p, ij, pc, found)
-				call json%get(pc, '@', ival)
-				!print *, 'ival = ', ival
-				template(ij) = ival
-			end do
-
-			! Number of non-zeros in matrix
-			nnonzero = count(template /= 0)
-
-			allocate(t2(sg%n, sg%n))
-			t2 = reshape(template, [sg%n, sg%n])
-			deallocate(template)
-
-			! Indices of non-zeros
-			allocate(sg%inz(2, nnonzero))
-
-			! Mark non-zero locations from template 1/0's matrix
-			k = 0
-			do i = 1, sg%n
-			do j = 1, sg%n
-
-				! Note the transpose from row-major template to Fortran default
-				! column-major
-				if (t2(j, i) /= 0) then
-					k = k + 1
-					sg%inz(:, k) = [i, j]
-				end if
-
-			end do
-			end do
-			deallocate(t2)
-
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown array JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			!write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
-
-		end if
-
-		! TODO: if possible, update pointer p to tail of array, so this callback
-		! doesn't reiterate through each element individually
-		!
-		! json_get_tail() ?
-
-	else if (key /= "" .and. key /= sg%fjson) then
-
-		write(*,*) 'Warning:  unknown JSON key with unexpected type'
-		write(*,*) 'Key    :"'//key//'"'
-		write(*,*) 'Type   :', var_type
-		write(*,*)
-
-	end if
-
-	! always false, since we want to traverse all nodes:
-	finished = .false.
-
-end subroutine load_bomat_json
-
-!===============================================================================
-
 subroutine load_settings(s, io)
 
-	! Load hard-coded settings.  TODO: json config file TBD, this API is not
-	! stable
+	! Load input settings from JSON config file
 
 	use json_module
 
@@ -923,8 +750,6 @@ subroutine load_settings(s, io)
 	integer, intent(out) :: io
 
 	!********
-
-	integer, allocatable :: template(:), t2(:,:)
 
 	type(json_file) :: json
 
@@ -956,18 +781,14 @@ subroutine load_settings(s, io)
 	call json%print()
 	write(*,*)
 
-	! Traverse callback cannot take extra args.  Must pass settings s as
-	! a global variable
-	sg = s
-	call json%traverse(load_bomat_json)
-	s = sg
+	call json%traverse(traverse_bomat_json)
 
-	!print *, 'size(sg%inz) = ', size(sg%inz)
+	!print *, 'size(s%inz) = ', size(s%inz)
 	!print *, 'size(s%inz)  = ', size(s%inz)
 	!print *, 's%fcolormap = ', s%fcolormap
 
-	!! TODO: finalize the global object
-	!call destroy(sg)
+	!! TODO: finalize the global object, and the json object too
+	!call destroy(s)
 
 	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
 	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
@@ -1156,6 +977,225 @@ subroutine load_settings(s, io)
 
 	!! Pretty ugly
 	!s%colormap = "cyan-magenta"
+
+contains
+
+!===============================================================================
+
+subroutine traverse_bomat_json(json, p, finished)
+
+	! Parse the bomat json config file, called iteratively from load_settings()
+	! via the traverse callback.  This is a nested subroutine because it needs
+	! to access settings s from caller, but json traverse signature cannot take
+	! extra arguments.
+
+	! Based on the traverser here:
+	!
+	!     https://github.com/jacobwilliams/json-fortran/issues/204
+	!
+
+	use json_module
+
+	class(json_core), intent(inout)       :: json
+	type(json_value), pointer, intent(in) :: p
+	logical(json_LK), intent(out)         :: finished
+
+	!********
+
+	character(kind=json_CK, len=:), allocatable :: key, sval
+
+	integer(json_IK) :: var_type, ival, ncount, ij
+	integer :: i, j, k, nnonzero
+	integer, allocatable :: template(:), t2(:,:)
+
+	logical(json_LK) :: found
+
+	real(json_RK) :: rvalx, rvaly
+
+	type(json_value), pointer :: pc
+
+	! JSON keys
+	character(len = *), parameter :: &
+		population_id = 'Population'     , &
+		template_id   = 'Template matrix', &
+		samples_id    = 'Samples'        , &
+		img_size_id   = 'Image size'     , &
+		fcolormap_id  = 'Colormap file'  , &
+		colormap_id   = 'Colormap name'
+
+	! Get the name of the key and the type of its value
+	call json%info(p, name = key, var_type = var_type)
+
+	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
+
+	! TODO: remove var_type conditions, they aren't necessary.  Simply use
+	! %get() inside each key condition instead
+
+	! String values
+	if (var_type == json_string) then
+
+		call json%get(p, '@', sval)
+
+		!print *, 'key = "'//key//'"'
+		!print *, 'val = "'//sval//'"'
+
+		if (key == fcolormap_id) then
+
+			! Colormap file
+			s%fcolormap = sval
+
+		else if (key == colormap_id) then
+
+			! Colormap name
+			s%colormap = sval
+
+		else if (key /= "") then
+
+			! TODO: can this be done generically for any type?
+			write(*,*) 'Warning:  unknown string JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			write(*,*) 'Value  : "'//sval//'"'
+			write(*,*)
+
+		end if
+
+	! Integer values
+	else if (var_type == json_integer) then
+
+		call json%get(p, '@', ival)
+
+		!print *, 'key = "'//key//'"'
+		!print *, 'val = ', ival
+
+		if (key == samples_id) then
+
+			! Number of random samples to take
+			s%nsample = ival
+
+		else if (key == img_size_id) then
+
+			! Image size.  In a 2-pass run, one of these is automatically
+			! resized later for an appropriate aspect ratio
+			s%nx = ival
+			s%ny = ival
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown integer JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			write(*,*) 'Value  : ', ival
+			write(*,*)
+
+		end if
+
+	else if (var_type == json_array) then
+
+		ncount = json%count(p)
+
+		!print *, 'array key = "'//key//'"'
+		!print *, 'ncount = ', ncount
+		!print *, ''
+
+		if (key == population_id) then
+
+			! Generator sample set.  This is called the "population"
+
+			! Size of population (real + imaginary pairs)
+			s%np = ncount / 2
+
+			allocate(s%p(s%np))
+
+			do ij = 0, s%np - 1
+
+				call json%get_child(p, ij*2 + 1, pc, found)
+				call json%get(pc, '@', rvalx)
+				call json%get_child(p, ij*2 + 2, pc, found)
+				call json%get(pc, '@', rvaly)
+
+				s%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
+
+			end do
+
+			!print *, 's%p = ', s%p
+
+		else if (key == template_id) then
+
+			! Non-zero pattern template matrix
+
+			! Size of matrices
+			!
+			! TODO: this is dangerous.  There's no Fortran integer sqrt
+			s%n = int(sqrt(dble(ncount)))
+
+			!print *, 's%n = ', s%n
+
+			! TODO
+			if (s%n * s%n /= ncount) then
+				write(*,*) 'Error: matrix is not square'
+			end if
+
+			allocate(template(s%n * s%n))
+
+			do ij = 1, ncount
+				call json%get_child(p, ij, pc, found)
+				call json%get(pc, '@', ival)
+				!print *, 'ival = ', ival
+				template(ij) = ival
+			end do
+
+			! Number of non-zeros in matrix
+			nnonzero = count(template /= 0)
+
+			allocate(t2(s%n, s%n))
+			t2 = reshape(template, [s%n, s%n])
+			deallocate(template)
+
+			! Indices of non-zeros
+			allocate(s%inz(2, nnonzero))
+
+			! Mark non-zero locations from template 1/0's matrix
+			k = 0
+			do i = 1, s%n
+			do j = 1, s%n
+
+				! Note the transpose from row-major template to Fortran default
+				! column-major
+				if (t2(j, i) /= 0) then
+					k = k + 1
+					s%inz(:, k) = [i, j]
+				end if
+
+			end do
+			end do
+			deallocate(t2)
+
+		else if (key /= "") then
+			write(*,*) 'Warning:  unknown array JSON key'
+			write(*,*) 'Key    : "'//key//'"'
+			!write(*,*) 'Value  : "'//sval//'"'
+			write(*,*)
+
+		end if
+
+		! TODO: if possible, update pointer p to tail of array, so this callback
+		! doesn't reiterate through each element individually
+		!
+		! json_get_tail() ?
+
+	else if (key /= "" .and. key /= s%fjson) then
+
+		write(*,*) 'Warning:  unknown JSON key with unexpected type'
+		write(*,*) 'Key    :"'//key//'"'
+		write(*,*) 'Type   :', var_type
+		write(*,*)
+
+	end if
+
+	! always false, since we want to traverse all nodes:
+	finished = .false.
+
+end subroutine traverse_bomat_json
+
+!===============================================================================
 
 end subroutine load_settings
 
