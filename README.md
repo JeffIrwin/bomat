@@ -14,6 +14,8 @@ See the original project:  https://github.com/BohemianMatrices/BHIME-Project
     git clone --recursive https://github.com/JeffIrwin/bomat
     cd bomat
 
+## Build
+
 Use CMake, or run the provided CMake wrapper script:
 
     ./build.sh
@@ -65,4 +67,38 @@ where `examples/bomat-7c--2022-02-01.json` configures a few input options:
     }
 
 The path to the `Colormap file`, if not absolute, must be relative to the runtime directory.
+
+### Command-line arguments
+
+Use `-h` for help:
+
+    ./build/bomat.exe -h
+
+
+     Starting bomat
+    
+    Usage: bomat [-h] [-p] [-e] FILE.JSON
+    
+    Calculate Bohemian matrix eigenvalues and export a plot to a PNG file
+    
+    Positional arguments:
+    FILE.JSON   Configuration filename for setting inputs
+    
+    Optional arguments:
+    -h, --help  Show this help message and exit
+    -e          Calculate and export eigenvalues without plotting
+    -p          Plot eigenvalues from previous job
+
+    Sample FILE.JSON contents are like this:
+    {
+    [omitted from README]
+    }
+
+I recommend initially running with a low number of `Samples`, around 1 million,
+while playing with the `Population` and `Template matrix` structure.  Once you
+find something interesting, use a higher number of `Samples` for
+a higher-quality image.
+
+Finally, you can use `-p` to re-plot with a different colormap without
+recalculating eigenvalues from scratch.
 
