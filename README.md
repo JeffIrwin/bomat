@@ -72,9 +72,6 @@ The path to the `Colormap file`, if not absolute, must be relative to the runtim
 
 Use `-h` for help:
 
-    ./build/bomat.exe -h
-
-
      Starting bomat
     
     Usage: bomat [-h] [-p] [-e] FILE.JSON
