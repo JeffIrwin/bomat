@@ -92,6 +92,7 @@ subroutine bomat_settings_print(s)
 	integer :: i, j, iu
 	integer, allocatable :: t2(:,:)
 
+	! This could be an optional argument for printing to file
 	iu = output_unit
 
 	write(iu, *) fcolormap_id, dlm, s%fcolormap
@@ -661,12 +662,13 @@ subroutine load_args(s, io)
 	!********
 
 	character :: argv*256
-	character(len = :), allocatable :: help
+	character(len = :), allocatable :: help, help_short
 	character(len = *), parameter :: &
-			id_h    = "-h"    , &
-			id_help = "--help", &
-			id_inco = "-i"    , &
-			id_plot = "-p"    , &
+			id_file = "FILE.JSON" , &
+			id_h    = "-h"        , &
+			id_help = "--help"    , &
+			id_inco = "-i"        , &
+			id_plot = "-p"        , &
 			id_eig  = "-e"
 
 	integer :: argc, i, ipos
@@ -675,22 +677,24 @@ subroutine load_args(s, io)
 
 	! TODO: use json key parameters in help text
 
-	help = "" &
+	help_short = "" &
 			//"Usage: "//me//" ["//id_h//"] ["//id_plot//"] ["//id_eig//"] " &
-			//"FILE.JSON"//newline &
+			//id_file//newline &
 			//newline &
 			//"Calculate Bohemian matrix eigenvalues and export a plot to a " &
 			//"PNG file"//newline &
 			//newline &
 			//"Positional arguments:"//newline &
-			//"FILE.JSON   Configuration filename for setting inputs"//newline &
+			//id_file//"   Configuration filename for setting inputs"//newline &
 			//newline &
 			//"Optional arguments:"//newline &
 			//id_h//", "//id_help//"  Show this help message and exit"//newline &
 			//id_eig //"          Calculate and export eigenvalues without plotting"//newline &
 			//id_plot//"          Plot eigenvalues from previous job"//newline &
-			//newline &
-			//"Sample FILE.JSON contents are like this:"//newline &
+			//newline
+
+	help = help_short &
+			//"Sample "//id_file//" contents are like this:"//newline &
 			//'{'//newline &
 			//newline &
 			//'	# This is a comment (non-standard JSON extension)'//newline &
@@ -734,11 +738,14 @@ subroutine load_args(s, io)
 
 	argc = command_argument_count()
 
-	!! TODO:  re-enable this check to require input file.  print help too
-	!if (argc < 1) then
-	!	io = ERR_CMD_ARGS
-	!	return
-	!end if
+	if (argc < 1) then
+		write(*,*) 'Error: required positional argument '//id_file &
+				//' is not defined'
+		write(*,*)
+		write(*, '(a)') help_short
+		io = ERR_CMD_ARGS
+		return
+	end if
 
 	ipos = 0
 	i = 0
