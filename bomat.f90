@@ -8,7 +8,16 @@ module mbomat
 	! My name a bomat.  Very nice!
 	character(len = *), parameter :: me = "bomat"
 
-	character, parameter :: nullc = char(0), newline = char(10)
+	character, parameter :: nullc = char(0), t = char(9), newline = char(10)
+
+	! JSON keys
+	character(len = *), parameter :: &
+		population_id = 'Population'     , &
+		template_id   = 'Template matrix', &
+		samples_id    = 'Samples'        , &
+		img_size_id   = 'Image size'     , &
+		fcolormap_id  = 'Colormap file'  , &
+		colormap_id   = 'Colormap name'
 
 	double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
 
@@ -45,6 +54,9 @@ module mbomat
 		logical :: arg_in_core = .false., arg_eig = .false., &
 				arg_plot = .false., arg_help = .false.
 
+		contains
+			procedure :: print => bomat_settings_print
+
 	end type bomat_settings
 
 	!********
@@ -64,6 +76,58 @@ module mbomat
 	!********
 
 contains
+
+!===============================================================================
+
+subroutine bomat_settings_print(s)
+
+	use iso_fortran_env
+
+	class(bomat_settings), intent(in) :: s
+
+	character(len = *), parameter :: dlm = ': ', vdm = ', '
+
+	!********
+
+	integer :: i, j, iu
+	integer, allocatable :: t2(:,:)
+
+	iu = output_unit
+
+	write(iu, *) fcolormap_id, dlm, s%fcolormap
+	write(iu, *) colormap_id , dlm, s%colormap
+	write(iu, *) img_size_id , dlm, s%nx
+	write(iu, *) samples_id  , dlm, s%nsample
+
+	! Recreate template matrix just to print it
+	allocate(t2(s%n, s%n))
+	t2 = 0
+	do i = 1, size(s%inz, 2)
+		t2(s%inz(1,i), s%inz(2,i)) = 1
+	end do
+
+	write(iu, *) template_id, dlm
+	write(iu, *) '['
+	do i = 1, s%n
+		write(iu, '(a)', advance = 'no') t
+		do j = 1, s%n
+			write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
+		end do
+	write(iu, *)
+	end do
+	write(iu, *) ']'
+
+	write(iu, *) population_id, dlm
+	write(iu, *) '['
+	do i = 1, s%np
+		write(iu, '(a,es14.4,a,es14.4,a)') t, real(s%p(i)), vdm, &
+		                                     aimag(s%p(i)), vdm
+	end do
+	write(iu, *) ']'
+
+	write(iu, *)
+
+end subroutine bomat_settings_print
 
 !===============================================================================
 
@@ -321,7 +385,7 @@ subroutine calc_eigenvalues(s, d, io)
 	close(im)
 
 	! TODO:  warn if eigenvalues are outside of plot bounds? Not an issue with
-	! 2-pass run
+	! off-core run
 
 	write(*,*) 'Eigenvalue bounds:'
 	write(*,*) 'Re in [', wxmin, ', ', wxmax, ']'
@@ -609,6 +673,8 @@ subroutine load_args(s, io)
 
 	io = 0
 
+	! TODO: use json key parameters in help text
+
 	help = "" &
 			//"Usage: "//me//" ["//id_h//"] ["//id_plot//"] ["//id_eig//"] " &
 			//"FILE.JSON"//newline &
@@ -776,19 +842,15 @@ subroutine load_settings(s, io)
 		return
 	end if
 
-	! TODO:  make a custom settings printer, with population and template neatly
-	! formatted instead of 1 number per line
-	call json%print()
-	write(*,*)
+	!call json%print()
 
 	call json%traverse(traverse_bomat_json)
+
+	call s%print()
 
 	!print *, 'size(s%inz) = ', size(s%inz)
 	!print *, 'size(s%inz)  = ', size(s%inz)
 	!print *, 's%fcolormap = ', s%fcolormap
-
-	!! TODO: finalize the global object, and the json object too
-	!call destroy(s)
 
 	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
 	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
@@ -1014,15 +1076,6 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	type(json_value), pointer :: pc
 
-	! JSON keys
-	character(len = *), parameter :: &
-		population_id = 'Population'     , &
-		template_id   = 'Template matrix', &
-		samples_id    = 'Samples'        , &
-		img_size_id   = 'Image size'     , &
-		fcolormap_id  = 'Colormap file'  , &
-		colormap_id   = 'Colormap name'
-
 	! Get the name of the key and the type of its value
 	call json%info(p, name = key, var_type = var_type)
 
@@ -1128,7 +1181,8 @@ subroutine traverse_bomat_json(json, p, finished)
 
 			!print *, 's%n = ', s%n
 
-			! TODO
+			! TODO:  add a "Matrix size" input to fix this.  It will be required
+			! for e.g. "tridiagonal" input
 			if (s%n * s%n /= ncount) then
 				write(*,*) 'Error: matrix is not square'
 			end if
