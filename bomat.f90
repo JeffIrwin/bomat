@@ -772,6 +772,14 @@ subroutine load_settings(s, io)
 	s%fcolormap = ""
 	s%colormap  = ""
 
+	! Image bounds in complex plane.  Careful with aspect ratio.  These are
+	! reset automatically later in a 2-pass run.  Check thesis.  Is ~sqrt(n)
+	! better?
+	s%xmin = -3.0
+	s%xmax =  3.0
+	s%ymin = -3.0
+	s%ymax =  3.0
+
 	call json%initialize()
 	call json%load(filename = s%fjson)
 	if (json%failed()) then
@@ -786,6 +794,9 @@ subroutine load_settings(s, io)
 
 	!call json%print()
 
+	! TODO: add enum options for things like tridiagonal, Toeplitz, Hermitian,
+	! symmetric, skew-symmetric, fully-dense, etc.
+
 	call json%traverse(traverse_bomat_json)
 
 	call s%print()
@@ -793,194 +804,6 @@ subroutine load_settings(s, io)
 	!print *, 'size(s%inz) = ', size(s%inz)
 	!print *, 'size(s%inz)  = ', size(s%inz)
 	!print *, 's%fcolormap = ', s%fcolormap
-
-	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
-	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
-
-	! Image bounds in complex plane.  Careful with aspect ratio.  These are
-	! reset automatically later in a 2-pass run.  Check thesis.  Is ~sqrt(n)
-	! better?
-	s%xmin = -3.0
-	s%xmax =  3.0
-	s%ymin = -3.0
-	s%ymax =  3.0
-
-
-
-
-
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(1) = cmplx(0.5d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	!s%p(2) = cmplx(0.d0,  1.d0, kind = 8)
-	!s%p(3) = cmplx(0.d0, -1.d0, kind = 8)
-
-	!s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
-	!s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
-	!s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	!s%p(4:6) = -0.1 * s%p(1:3)
-	!s%p = s%p * exp(ic * 0.5d0 * pi)
-
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(4) = cmplx(-1.d0, -0.1d0, kind = 8)
-
-	!s%p(1) = cmplx( 1.d0, -0.3d0, kind = 8)
-	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0, -0.3d0, kind = 8)
-	!s%p(4) = cmplx(-1.d0,  0.1d0, kind = 8)
-
-	!s%p(1) = cmplx( 1.d0,  0.d0, kind = 8)
-	!s%p(2) = cmplx( 0.d0,  1.d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0, kind = 8)
-	!s%p(4) = cmplx( 0.d0, -1.d0, kind = 8)
-
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx( 0.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(4) = cmplx( 0.d0, -0.1d0, kind = 8)
-
-	!!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(1) = cmplx(0.1d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 5.d0), sin(2.d0 * pi / 5.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 5.d0), sin(4.d0 * pi / 5.d0), kind = 8)
-	!s%p(4) = cmplx(cos(6.d0 * pi / 5.d0), sin(6.d0 * pi / 5.d0), kind = 8)
-	!s%p(5) = cmplx(cos(8.d0 * pi / 5.d0), sin(8.d0 * pi / 5.d0), kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 6.d0), sin(2.d0 * pi / 6.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 6.d0), sin(4.d0 * pi / 6.d0), kind = 8)
-	!s%p(4) = cmplx(cos(6.d0 * pi / 6.d0), sin(6.d0 * pi / 6.d0), kind = 8)
-	!s%p(5) = cmplx(cos(8.d0 * pi / 6.d0), sin(8.d0 * pi / 6.d0), kind = 8)
-	!s%p(6) = cmplx(cos(1.d1 * pi / 6.d0), sin(1.d1 * pi / 6.d0), kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos( 2.d0 * pi / 7.d0), sin( 2.d0 * pi / 7.d0), kind = 8)
-	!s%p(3) = cmplx(cos( 4.d0 * pi / 7.d0), sin( 4.d0 * pi / 7.d0), kind = 8)
-	!s%p(4) = cmplx(cos( 6.d0 * pi / 7.d0), sin( 6.d0 * pi / 7.d0), kind = 8)
-	!s%p(5) = cmplx(cos( 8.d0 * pi / 7.d0), sin( 8.d0 * pi / 7.d0), kind = 8)
-	!s%p(6) = cmplx(cos( 1.d1 * pi / 7.d0), sin( 1.d1 * pi / 7.d0), kind = 8)
-	!s%p(7) = cmplx(cos(1.2d1 * pi / 7.d0), sin(1.2d1 * pi / 7.d0), kind = 8)
-
-	!! Upper triangle, main diagonal, and first band below diagonal
-	!template = [                &
-	!	1, 1, 1, 1, 1, 1, 1, 1, &
-	!	1, 1, 1, 1, 1, 1, 1, 1, &
-	!	0, 1, 1, 1, 1, 1, 1, 1, &
-	!	0, 0, 1, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 8x8
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 7x7
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 3.5-ish diagonal
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! Quad-diagonal.  More non-zeros seem to just fill in the sparse areas and
-	!! make the plot more washed-out and less interesting
-	!template = [                &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! Pentadiagonal.  More non-zeros seem to just fill in the sparse areas and
-	!! make the plot more washed-out and less interesting
-	!template = [                &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 1, 0, 0, 0, &
-	!	0, 1, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 1, 0, &
-	!	0, 0, 0, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1  &
-	!	]
-
-	!! Fully-dense
-	!template = 1
-
-	!! Colormap file and name
-	!s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
-
-	!s%colormap = "Inferno (matplotlib)"
-	!s%colormap = "Viridis (matplotlib)"
-	!s%colormap = "Magma (matplotlib)"
-	!s%colormap = "Plasma (matplotlib)"
-
-	!s%colormap = "erdc_blue2green_BW"
-	!s%colormap = "Black, Blue and White"
-	!s%colormap = "Blue Orange (divergent)"
-
-	!s%colormap = "Asymmtrical Earth Tones (6_21b)"
-
-	!! Similar to erdc_blue2green_BW.  Not bad
-	!s%colormap = "gist_earth"
-
-	!! Meh
-
-	!s%colormap = "Blue - Green - Orange"
-	!s%colormap = "Blue to Red Rainbow"
-
-	!! This is just plain inferior to inferno.  They're very similar, but
-	!! inferno has some purple.
-	!s%colormap = "Black-Body Radiation"
-
-	!! Custom
-	!s%fcolormap = "custom-maps.json"
-	!s%colormap = "bisexual"
-	!s%colormap = "bisexual-light"
-
-	!! Pretty ugly
-	!s%colormap = "cyan-magenta"
 
 contains
 
