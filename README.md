@@ -1,4 +1,6 @@
 
+![](https://github.com/JeffIrwin/bomat/workflows/CI/badge.svg)
+
 # bomat
 
 *Cultural learnings of Bohemia for make benefit glorious library of LAPACK*
