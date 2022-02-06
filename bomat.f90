@@ -79,59 +79,6 @@ contains
 
 !===============================================================================
 
-subroutine bomat_settings_print(s)
-
-	use iso_fortran_env
-
-	class(bomat_settings), intent(in) :: s
-
-	character(len = *), parameter :: dlm = ': ', vdm = ', '
-
-	!********
-
-	integer :: i, j, iu
-	integer, allocatable :: t2(:,:)
-
-	! This could be an optional argument for printing to file
-	iu = output_unit
-
-	write(iu, *) fcolormap_id, dlm, s%fcolormap
-	write(iu, *) colormap_id , dlm, s%colormap
-	write(iu, *) img_size_id , dlm, s%nx
-	write(iu, *) samples_id  , dlm, s%nsample
-
-	! Recreate template matrix just to print it
-	allocate(t2(s%n, s%n))
-	t2 = 0
-	do i = 1, size(s%inz, 2)
-		t2(s%inz(1,i), s%inz(2,i)) = 1
-	end do
-
-	write(iu, *) template_id, dlm
-	write(iu, *) '['
-	do i = 1, s%n
-		write(iu, '(a)', advance = 'no') t
-		do j = 1, s%n
-			write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
-		end do
-	write(iu, *)
-	end do
-	write(iu, *) ']'
-
-	write(iu, *) population_id, dlm
-	write(iu, *) '['
-	do i = 1, s%np
-		write(iu, '(a,es14.4,a,es14.4,a)') t, real(s%p(i)), vdm, &
-		                                     aimag(s%p(i)), vdm
-	end do
-	write(iu, *) ']'
-
-	write(iu, *)
-
-end subroutine bomat_settings_print
-
-!===============================================================================
-
 subroutine bomat(io)
 
 	! High-level driver
@@ -1214,6 +1161,62 @@ end subroutine traverse_bomat_json
 !===============================================================================
 
 end subroutine load_settings
+
+!===============================================================================
+
+subroutine bomat_settings_print(s)
+
+	use iso_fortran_env
+
+	class(bomat_settings), intent(in) :: s
+
+	character(len = *), parameter :: dlm = ': ', vdm = ', '
+
+	!********
+
+	integer :: i, j, iu
+	integer, allocatable :: t2(:,:)
+
+	! This could be an optional argument for printing to file
+	iu = output_unit
+
+	! Settings like fjson, arg_plot, etc. are not printed.  Only JSON file
+	! settings
+
+	write(iu, *) fcolormap_id, dlm, s%fcolormap
+	write(iu, *) colormap_id , dlm, s%colormap
+	write(iu, *) img_size_id , dlm, s%nx
+	write(iu, *) samples_id  , dlm, s%nsample
+
+	! Recreate template matrix just to print it
+	allocate(t2(s%n, s%n))
+	t2 = 0
+	do i = 1, size(s%inz, 2)
+		t2(s%inz(1,i), s%inz(2,i)) = 1
+	end do
+
+	write(iu, *) template_id, dlm
+	write(iu, *) '['
+	do i = 1, s%n
+		write(iu, '(a)', advance = 'no') t
+		do j = 1, s%n
+			write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
+		end do
+	write(iu, *)
+	end do
+	write(iu, *) ']'
+
+	write(iu, *) population_id, dlm
+	write(iu, *) '['
+	do i = 1, s%np
+		write(iu, '(a,es14.4,a,es14.4,a)') t, real(s%p(i)), vdm, &
+		                                     aimag(s%p(i)), vdm
+	end do
+	write(iu, *) ']'
+
+	write(iu, *)
+
+end subroutine bomat_settings_print
 
 !===============================================================================
 
