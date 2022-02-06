@@ -162,7 +162,7 @@ subroutine calc_eigenvalues(s, d, io)
 
 	double complex, allocatable :: a(:,:), w(:), vl(:,:), vr(:,:), work(:)
 
-	double precision :: r, dx, dy, wx, wy, wxmin, wxmax, wymin, wymax, &
+	double precision :: dx, dy, wx, wy, wxmin, wxmax, wymin, wymax, &
 			wmargin, dwx, dwy
 	double precision, allocatable :: rwork(:)
 
@@ -231,7 +231,7 @@ subroutine calc_eigenvalues(s, d, io)
 	write(*, '(a)', advance = 'no') ' |'
 
 	!$OMP parallel do default(shared) &
-	!$OMP&    private(a, i, r, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
+	!$OMP&    private(a, i, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
 	do is = 1, s%nsample
 
 		! Progress bar
@@ -244,12 +244,7 @@ subroutine calc_eigenvalues(s, d, io)
 		end if
 		!$OMP end critical
 
-		! Fill non-zeros of matrix a randomly from population
-		a = 0.d0
-		do i = 1, size(s%inz, 2)
-			call random_number(r)
-			a(s%inz(1,i), s%inz(2,i)) = s%p(floor(r * s%np) + 1)
-		end do
+		a = random_matrix(s)
 
 		!! There is no Fortran edit descriptor for complex numbers :(
 		!print *, "a = "
@@ -344,6 +339,29 @@ subroutine calc_eigenvalues(s, d, io)
 	!write(*,*)
 
 end subroutine calc_eigenvalues
+
+!=======================================================================
+
+function random_matrix(s) result(a)
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double precision :: r
+
+	integer :: i
+
+	! Fill non-zeros of matrix a randomly from population
+	a = 0.d0
+	do i = 1, size(s%inz, 2)
+		call random_number(r)
+		a(s%inz(1,i), s%inz(2,i)) = s%p(floor(r * s%np) + 1)
+	end do
+
+end function random_matrix
 
 !=======================================================================
 
@@ -829,9 +847,9 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	!********
 
-	character(kind=json_CK, len=:), allocatable :: key, sval
+	character(kind=json_CK, len=:), allocatable :: key
 
-	integer(json_IK) :: var_type, ival, ncount, ij
+	integer(json_IK) :: ival, ncount, ij
 	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
 
@@ -843,7 +861,6 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	! Get the name of the key and the type of its value
 	call json%info(p, name = key)
-	!call json%info(p, name = key, var_type = var_type)
 
 	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
 
@@ -865,7 +882,7 @@ subroutine traverse_bomat_json(json, p, finished)
 		! integer*8.  Cast from real instead to handle large values >~ 2 billion
 		call json%get(p, '@', rvalx)
 		!call json%get(p, '@', s%nsample)
-		s%nsample = rvalx
+		s%nsample = int(rvalx, kind = 8)
 
 	else if (key == img_size_id) then
 
