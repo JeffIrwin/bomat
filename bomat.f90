@@ -317,59 +317,52 @@ subroutine calc_eigenvalues(s, d, io)
 
 			do i = 1, s%n
 
-				!! Remove real line.  TODO: make this optional.  Handle in
-				!! draw_plot instead?  Could set tolerance in pixels there
-				!! instead of complex units
+				wx =  real(w(i))
+				wy = aimag(w(i))
 
-				!if (abs(imagpart(w(i))) > 1.d-6) then
+				!$OMP critical
 
-					wx =  real(w(i))
-					wy = aimag(w(i))
+				! TODO: these could all be done with OMP reduction
+				! operators
+
+				neigen = neigen + 1
+
+				if (.not. maxinit) then
+					maxinit = .true.
+					wxmin = wx
+					wxmax = wx
+					wymin = wy
+					wymax = wy
+				else
+					wxmin = min(wxmin, wx)
+					wxmax = max(wxmax, wx)
+					wymin = min(wymin, wy)
+					wymax = max(wymax, wy)
+				end if
+
+				!$OMP end critical
+
+				if (.not. s%arg_in_core) then
 
 					!$OMP critical
-
-					! TODO: these could all be done with OMP reduction
-					! operators
-
-					neigen = neigen + 1
-
-					if (.not. maxinit) then
-						maxinit = .true.
-						wxmin = wx
-						wxmax = wx
-						wymin = wy
-						wymax = wy
-					else
-						wxmin = min(wxmin, wx)
-						wxmax = max(wxmax, wx)
-						wymin = min(wymin, wy)
-						wymax = max(wymax, wy)
-					end if
-
+					write(id) wx, wy
 					!$OMP end critical
 
-					if (.not. s%arg_in_core) then
+				else
+
+					! Pixel coordinates.  Invert so y is up
+					ix = int(1    + (wx - s%xmin) / dx * s%nx)
+					iy = int(s%ny - (wy - s%ymin) / dy * s%ny)
+
+					if (ix >= 1 .and. ix <= s%nx .and. &
+					    iy >= 1 .and. iy <= s%ny) then
 
 						!$OMP critical
-						write(id) wx, wy
+						d%hist(ix, iy) = d%hist(ix, iy) + 1
 						!$OMP end critical
 
-					else
-
-						! Pixel coordinates.  Invert so y is up
-						ix = int(1    + (wx - s%xmin) / dx * s%nx)
-						iy = int(s%ny - (wy - s%ymin) / dy * s%ny)
-
-						if (ix >= 1 .and. ix <= s%nx .and. &
-						    iy >= 1 .and. iy <= s%ny) then
-
-							!$OMP critical
-							d%hist(ix, iy) = d%hist(ix, iy) + 1
-							!$OMP end critical
-
-						end if
 					end if
-				!end if
+				end if
 			end do
 		end if
 	end do
@@ -601,22 +594,18 @@ subroutine load_eigenvalues(s, d, io)
 			!	write(*, '(a)', advance = 'no') '='
 			!end if
 
-			!! Remove real line.  TODO: make this optional
-			!if (abs(imagpart(w(i))) > 1.d-6) then
+			! Pixel coordinates.  Invert so y is up
+			ix = int(1    + (ws(1,j) - s%xmin) / dx * s%nx)
+			iy = int(s%ny - (ws(2,j) - s%ymin) / dy * s%ny)
+			!ix = int(1    + (wxs(j) - s%xmin) / dx * s%nx)
+			!iy = int(s%ny - (wys(j) - s%ymin) / dy * s%ny)
 
-				! Pixel coordinates.  Invert so y is up
-				ix = int(1    + (ws(1,j) - s%xmin) / dx * s%nx)
-				iy = int(s%ny - (ws(2,j) - s%ymin) / dy * s%ny)
-				!ix = int(1    + (wxs(j) - s%xmin) / dx * s%nx)
-				!iy = int(s%ny - (wys(j) - s%ymin) / dy * s%ny)
+			if (ix >= 1 .and. ix <= s%nx .and. &
+			    iy >= 1 .and. iy <= s%ny) then
 
-				if (ix >= 1 .and. ix <= s%nx .and. &
-				    iy >= 1 .and. iy <= s%ny) then
+				d%hist(ix, iy) = d%hist(ix, iy) + 1
 
-					d%hist(ix, iy) = d%hist(ix, iy) + 1
-
-				end if
-			!end if
+			end if
 		end do
 		!$OMP end parallel do
 
