@@ -843,6 +843,7 @@ subroutine load_settings(s, io)
 		write(*,*) 'Could not load file "'//s%fjson//'"'
 		write(*,*)
 		call json%print_error_message()
+		write(*,*)
 		io = ERR_LOAD_JSON
 		return
 	end if
@@ -1082,158 +1083,113 @@ subroutine traverse_bomat_json(json, p, finished)
 	type(json_value), pointer :: pc
 
 	! Get the name of the key and the type of its value
-	call json%info(p, name = key, var_type = var_type)
+	call json%info(p, name = key)
+	!call json%info(p, name = key, var_type = var_type)
 
 	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
 
-	! TODO: remove var_type conditions, they aren't necessary.  Simply use
-	! %get() inside each key condition instead
+	!print *, 'key = "'//key//'"'
 
-	! String values
-	if (var_type == json_string) then
+	if (key == fcolormap_id) then
 
-		call json%get(p, '@', sval)
+		! Colormap file
+		call json%get(p, '@', s%fcolormap)
 
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = "'//sval//'"'
+	else if (key == colormap_id) then
 
-		if (key == fcolormap_id) then
+		! Colormap name
+		call json%get(p, '@', s%colormap)
 
-			! Colormap file
-			s%fcolormap = sval
+	else if (key == samples_id) then
 
-		else if (key == colormap_id) then
+		! Number of random samples to take.  json-fortran doesn't seem to support
+		! integer*8.  Cast from real instead to handle large values >~ 2 billion
+		call json%get(p, '@', rvalx)
+		!call json%get(p, '@', s%nsample)
+		s%nsample = rvalx
 
-			! Colormap name
-			s%colormap = sval
+	else if (key == img_size_id) then
 
-		else if (key /= "") then
+		! Image size.  In a 2-pass run, one of these is automatically
+		! resized later for an appropriate aspect ratio
+		call json%get(p, '@', s%nx)
+		s%ny = s%nx
 
-			! TODO: can this be done generically for any type?
-			write(*,*) 'Warning:  unknown string JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
+	else if (key == population_id) then
 
-		end if
-
-	! Integer values
-	else if (var_type == json_integer) then
-
-		call json%get(p, '@', ival)
-
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = ', ival
-
-		if (key == samples_id) then
-
-			! Number of random samples to take
-			s%nsample = ival
-
-		else if (key == img_size_id) then
-
-			! Image size.  In a 2-pass run, one of these is automatically
-			! resized later for an appropriate aspect ratio
-			s%nx = ival
-			s%ny = ival
-
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown integer JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : ', ival
-			write(*,*)
-
-		end if
-
-	else if (var_type == json_array) then
-
+		! Generator sample set.  This is called the "population"
 		ncount = json%count(p)
 
-		!print *, 'array key = "'//key//'"'
-		!print *, 'ncount = ', ncount
-		!print *, ''
+		! Size of population (real + imaginary pairs)
+		s%np = ncount / 2
 
-		if (key == population_id) then
+		allocate(s%p(s%np))
 
-			! Generator sample set.  This is called the "population"
+		do ij = 0, s%np - 1
 
-			! Size of population (real + imaginary pairs)
-			s%np = ncount / 2
+			call json%get_child(p, ij*2 + 1, pc, found)
+			call json%get(pc, '@', rvalx)
+			call json%get_child(p, ij*2 + 2, pc, found)
+			call json%get(pc, '@', rvaly)
 
-			allocate(s%p(s%np))
+			s%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
 
-			do ij = 0, s%np - 1
+		end do
 
-				call json%get_child(p, ij*2 + 1, pc, found)
-				call json%get(pc, '@', rvalx)
-				call json%get_child(p, ij*2 + 2, pc, found)
-				call json%get(pc, '@', rvaly)
+		!print *, 's%p = ', s%p
 
-				s%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
+	else if (key == template_id) then
 
-			end do
+		! Non-zero pattern template matrix
+		ncount = json%count(p)
 
-			!print *, 's%p = ', s%p
+		! Size of matrices
+		!
+		! TODO: this is dangerous.  There's no Fortran integer sqrt
+		s%n = int(sqrt(dble(ncount)))
 
-		else if (key == template_id) then
+		!print *, 's%n = ', s%n
 
-			! Non-zero pattern template matrix
+		! TODO:  add a "Matrix size" input to fix this.  It will be required
+		! for e.g. "tridiagonal" input
+		if (s%n * s%n /= ncount) then
+			write(*,*) 'Error: matrix is not square'
+		end if
 
-			! Size of matrices
-			!
-			! TODO: this is dangerous.  There's no Fortran integer sqrt
-			s%n = int(sqrt(dble(ncount)))
+		allocate(template(s%n * s%n))
 
-			!print *, 's%n = ', s%n
+		do ij = 1, ncount
+			call json%get_child(p, ij, pc, found)
+			call json%get(pc, '@', ival)
+			!print *, 'ival = ', ival
+			template(ij) = ival
+		end do
 
-			! TODO:  add a "Matrix size" input to fix this.  It will be required
-			! for e.g. "tridiagonal" input
-			if (s%n * s%n /= ncount) then
-				write(*,*) 'Error: matrix is not square'
+		! Number of non-zeros in matrix
+		nnonzero = count(template /= 0)
+
+		allocate(t2(s%n, s%n))
+		t2 = reshape(template, [s%n, s%n])
+		deallocate(template)
+
+		! Indices of non-zeros
+		allocate(s%inz(2, nnonzero))
+
+		! Mark non-zero locations from template 1/0's matrix
+		k = 0
+		do i = 1, s%n
+		do j = 1, s%n
+
+			! Note the transpose from row-major template to Fortran default
+			! column-major
+			if (t2(j, i) /= 0) then
+				k = k + 1
+				s%inz(:, k) = [i, j]
 			end if
 
-			allocate(template(s%n * s%n))
-
-			do ij = 1, ncount
-				call json%get_child(p, ij, pc, found)
-				call json%get(pc, '@', ival)
-				!print *, 'ival = ', ival
-				template(ij) = ival
-			end do
-
-			! Number of non-zeros in matrix
-			nnonzero = count(template /= 0)
-
-			allocate(t2(s%n, s%n))
-			t2 = reshape(template, [s%n, s%n])
-			deallocate(template)
-
-			! Indices of non-zeros
-			allocate(s%inz(2, nnonzero))
-
-			! Mark non-zero locations from template 1/0's matrix
-			k = 0
-			do i = 1, s%n
-			do j = 1, s%n
-
-				! Note the transpose from row-major template to Fortran default
-				! column-major
-				if (t2(j, i) /= 0) then
-					k = k + 1
-					s%inz(:, k) = [i, j]
-				end if
-
-			end do
-			end do
-			deallocate(t2)
-
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown array JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			!write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
-
-		end if
+		end do
+		end do
+		deallocate(t2)
 
 		! TODO: if possible, update pointer p to tail of array, so this callback
 		! doesn't reiterate through each element individually
@@ -1242,10 +1198,22 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	else if (key /= "" .and. key /= s%fjson) then
 
-		write(*,*) 'Warning:  unknown JSON key with unexpected type'
+		write(*,*) 'Warning:  unknown JSON key'
 		write(*,*) 'Key    :"'//key//'"'
-		write(*,*) 'Type   :', var_type
 		write(*,*)
+
+	end if
+
+	if (json%failed()) then
+
+		write(*,*) 'Error:'
+		write(*,*) 'Could not load file "'//s%fjson//'"'
+		write(*,*)
+		call json%print_error_message()
+		write(*,*)
+
+		! TODO: handle this.  Failure could occur e.g. if a value is the wrong
+		! type
 
 	end if
 
