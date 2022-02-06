@@ -245,11 +245,12 @@ subroutine calc_eigenvalues(s, d, io)
 		!$OMP end critical
 
 		a = random_matrix(s)
+		!a = random_toeplitz(s)
 
 		!! There is no Fortran edit descriptor for complex numbers :(
 		!print *, "a = "
 		!print "(16es14.4)", a
-		!print *, "a = ", a
+		!!print *, "a = ", a
 
 		! Call LAPACK to get eigenvalues (but not eigenvectors)
 		call zgeev(jobvl, jobvr, s%n, a, lda, w, vl, ldvl, vr, ldvr, &
@@ -344,6 +345,9 @@ end subroutine calc_eigenvalues
 
 function random_matrix(s) result(a)
 
+	! Make a random matrix with no specific structure with entries sampled from
+	! the population
+
 	type(bomat_settings), intent(in) :: s
 
 	double complex :: a(s%n, s%n)
@@ -362,6 +366,48 @@ function random_matrix(s) result(a)
 	end do
 
 end function random_matrix
+
+!=======================================================================
+
+function random_toeplitz(s) result(a)
+
+	! Make a random Toeplitz matrix
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	!double complex :: diags(s%n * 2 - 1)
+	double complex :: diags(-(s%n - 1): s%n - 1)
+
+	double precision :: r
+
+	integer :: i, j, k
+
+	!do i = 1, s%n * 2 - 1
+	do i = -(s%n - 1), s%n - 1
+		call random_number(r)
+		diags(i) = s%p(floor(r * s%np) + 1)
+	end do
+
+	!! Fully-dense Toeplitz
+	!do i = 1, s%n
+	!do j = 1, s%n
+	!	a(i,j) = diags(i - j)
+	!end do
+	!end do
+
+	! Template-based sparse Toeplitz
+	a = 0.d0
+	do k = 1, size(s%inz, 2)
+		i = s%inz(1,k)
+		j = s%inz(2,k)
+		a(i, j) = diags(i - j)
+	end do
+
+end function random_toeplitz
 
 !=======================================================================
 
