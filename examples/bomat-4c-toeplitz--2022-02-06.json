@@ -10,6 +10,12 @@
 		0, -1
 	],
 
+	"Matrix structure":
+	[
+		"Toeplitz",
+		"Hessenberg"
+	],
+
 	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
 	# from population.  This JSON array is rank-1, but it is reshaped in
 	# a row-major sense into a rank-2 matrix

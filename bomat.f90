@@ -12,12 +12,24 @@ module mbomat
 
 	! JSON keys
 	character(len = *), parameter :: &
-		population_id = 'Population'     , &
-		template_id   = 'Template matrix', &
-		samples_id    = 'Samples'        , &
-		img_size_id   = 'Image size'     , &
-		fcolormap_id  = 'Colormap file'  , &
+		struct_id     = 'Matrix structure', &
+		mat_size_id   = 'Matrix size'     , &
+		population_id = 'Population'      , &
+		template_id   = 'Template matrix' , &
+		samples_id    = 'Samples'         , &
+		img_size_id   = 'Image size'      , &
+		fcolormap_id  = 'Colormap file'   , &
 		colormap_id   = 'Colormap name'
+
+	! Other identifiers
+	character(len = *), parameter :: &
+		toeplitz_id    = "Toeplitz"      , &
+		tridiagonal_id = "Tridiagonal"   , &
+		hessenberg_id  = "Hessenberg"    , &
+		symmetric_id   = "Symmetric"     , &
+		skew_sym_id    = "Skew symmetric", &
+		hermitian_id   = "Hermitian"     , &
+		dense_id       = "Dense"
 
 	double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
 
@@ -51,8 +63,20 @@ module mbomat
 
 		double precision :: xmin, xmax, ymin, ymax
 
+		logical :: size_defined = .false.
+
+		! Command-line arguments
 		logical :: arg_in_core = .false., arg_eig = .false., &
 				arg_plot = .false., arg_help = .false.
+
+		! TODO:  add n-diagonal option, with n a variable int, e.g. tridiagonal,
+		! pentadiagonal, etc. (generalization of tridiagonal)
+
+		! Matrix structure options
+		logical :: toeplitz = .false., tridiagonal = .false., &
+				hessenberg = .false., symmetric = .false., &
+				skew_sym = .false., hermitian = .false., &
+				dense = .false.
 
 		contains
 			procedure :: print => bomat_settings_print
@@ -244,8 +268,12 @@ subroutine calc_eigenvalues(s, d, io)
 		end if
 		!$OMP end critical
 
-		a = random_matrix(s)
-		!a = random_toeplitz(s)
+		! TODO: use abstract interfaces.  c.f. blog
+		if (s%toeplitz) then
+			a = random_toeplitz(s)
+		else
+			a = random_matrix(s)
+		end if
 
 		!! There is no Fortran edit descriptor for complex numbers :(
 		!print *, "a = "
@@ -371,7 +399,15 @@ end function random_matrix
 
 function random_toeplitz(s) result(a)
 
-	! Make a random Toeplitz matrix
+	! Make a random Toeplitz matrix.  If you don't know what Toeplitz is, a 4x4
+	! is like this:
+	!
+	! [
+	!     e f g h
+	!     d e f g
+	!     c d e f
+	!     b c d e
+	! ]
 
 	type(bomat_settings), intent(in) :: s
 
@@ -379,25 +415,16 @@ function random_toeplitz(s) result(a)
 
 	!********
 
-	!double complex :: diags(s%n * 2 - 1)
 	double complex :: diags(-(s%n - 1): s%n - 1)
 
 	double precision :: r
 
 	integer :: i, j, k
 
-	!do i = 1, s%n * 2 - 1
 	do i = -(s%n - 1), s%n - 1
 		call random_number(r)
 		diags(i) = s%p(floor(r * s%np) + 1)
 	end do
-
-	!! Fully-dense Toeplitz
-	!do i = 1, s%n
-	!do j = 1, s%n
-	!	a(i,j) = diags(i - j)
-	!end do
-	!end do
 
 	! Template-based sparse Toeplitz
 	a = 0.d0
@@ -822,6 +849,8 @@ subroutine load_settings(s, io)
 
 	!********
 
+	integer :: i, j, k, nnonzero
+
 	type(json_file) :: json
 
 	! Not actually thrown from here
@@ -856,12 +885,39 @@ subroutine load_settings(s, io)
 		return
 	end if
 
+	!! One number per line in arrays.  Not great for template matrix
 	!call json%print()
 
-	! TODO: add enum options for things like tridiagonal, Toeplitz, Hermitian,
-	! symmetric, skew-symmetric, fully-dense, etc.
-
 	call json%traverse(traverse_bomat_json)
+
+	! Mark non-zeros for string-specified structures
+	!
+	! TODO: implement other options besides Hessenberg
+	if (s%hessenberg) then
+
+		! Upper Hessenberg.  Lower Hessenberg is not implemented, but would it
+		! make a difference?
+		nnonzero = s%n * (s%n + 1) / 2 + s%n - 1
+
+		! Indices of non-zeros
+		allocate(s%inz(2, nnonzero))
+
+		! Mark non-zero locations from template 1/0's matrix
+		k = 0
+		do i = 1, s%n
+		do j = 1, s%n
+
+			! Note the transpose from row-major template to Fortran default
+			! column-major
+			if (i <= j + 1) then
+				k = k + 1
+				s%inz(:, k) = [i, j]
+			end if
+
+		end do
+		end do
+
+	end if
 
 	call s%print()
 
@@ -893,10 +949,9 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	!********
 
-	character(kind=json_CK, len=:), allocatable :: key
+	character(kind=json_CK, len=:), allocatable :: key, sval
 
 	integer(json_IK) :: ival, ncount, ij
-	integer :: i, j, k, nnonzero
 	integer, allocatable :: template(:), t2(:,:)
 
 	logical(json_LK) :: found
@@ -960,22 +1015,65 @@ subroutine traverse_bomat_json(json, p, finished)
 
 		!print *, 's%p = ', s%p
 
+	else if (key == mat_size_id) then
+
+		s%size_defined = .true.
+		call json%get(p, '@', s%n)
+
+	else if (key == struct_id) then
+
+		! Structure string array
+		ncount = json%count(p)
+
+		do ij = 1, ncount
+
+			call json%get_child(p, ij, pc, found)
+			call json%get(pc, '@', sval)
+			print *, 'sval = ', sval
+
+			! TODO:  implement other structures.  Check for conflicts, e.g.
+			! tridiagonal and Hessenberg
+			if (sval == toeplitz_id) then
+				s%toeplitz = .true.
+
+			else if (sval == hessenberg_id) then
+				s%hessenberg = .true.
+
+			else
+				write(*,*) 'Error: unknown matrix structure string'
+				write(*,*) 'String: '//sval
+				write(*,*)
+				! TODO: handle error, return
+
+			end if
+
+		end do
+
 	else if (key == template_id) then
 
 		! Non-zero pattern template matrix
 		ncount = json%count(p)
 
 		! Size of matrices
-		!
-		! TODO: this is dangerous.  There's no Fortran integer sqrt
-		s%n = int(sqrt(dble(ncount)))
+		if (s%size_defined) then
 
-		!print *, 's%n = ', s%n
+			if (s%n * s%n /= ncount) then
+				write(*,*) 'Error: template size does not match '//mat_size_id
+				! TODO: handle error, return
+			end if
 
-		! TODO:  add a "Matrix size" input to fix this.  It will be required
-		! for e.g. "tridiagonal" input
-		if (s%n * s%n /= ncount) then
-			write(*,*) 'Error: matrix is not square'
+		else
+
+			! This is dangerous.  There's no Fortran integer sqrt
+			s%n = int(sqrt(dble(ncount)))
+
+			!print *, 's%n = ', s%n
+
+			if (s%n * s%n /= ncount) then
+				write(*,*) 'Error: matrix is not square'
+				! TODO: handle error, return
+			end if
+
 		end if
 
 		allocate(template(s%n * s%n))
@@ -1099,6 +1197,8 @@ subroutine bomat_settings_print(s)
 		                                     aimag(s%p(i)), vdm
 	end do
 	write(iu, *) ']'
+
+	! TODO: print structure options, specified size, etc.
 
 	write(iu, *)
 
