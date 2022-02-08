@@ -1059,7 +1059,7 @@ subroutine traverse_bomat_json(json, p, finished)
 		if (s%size_defined) then
 
 			if (s%n * s%n /= ncount) then
-				write(*,*) 'Error: '//template_id//' size does not match '
+				write(*,*) 'Error: '//template_id//' size does not match ' &
 						//mat_size_id
 				write(*,*)
 				finished = .true.
