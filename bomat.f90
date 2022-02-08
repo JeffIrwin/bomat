@@ -41,10 +41,11 @@ module mbomat
 	integer, parameter :: nrgb = 3
 
 	integer, parameter :: &
-			ERR_LOAD_JSON = -4, &
-			ERR_CMD_ARGS  = -3, &
-			ERR_COLORMAP  = -2, &
-			ERR_WRITEPNG  = -1
+			ERR_JSON_SYNTAX = -5, &
+			ERR_LOAD_JSON   = -4, &
+			ERR_CMD_ARGS    = -3, &
+			ERR_COLORMAP    = -2, &
+			ERR_WRITEPNG    = -1
 
 	!********
 
@@ -55,15 +56,15 @@ module mbomat
 		character(len = :), allocatable :: f, fcolormap, colormap, fjson, &
 				fdata, fmeta, fpng
 
-		integer :: n, np, nx, ny
-		integer(kind = 8) :: nsample
+		integer :: n, np, nx = 0, ny
+		integer(kind = 8) :: nsample = 0
 		integer, allocatable :: inz(:,:)
 
 		double complex, allocatable :: p(:)
 
 		double precision :: xmin, xmax, ymin, ymax
 
-		logical :: size_defined = .false.
+		logical :: size_defined = .false., template_defined = .false.
 
 		! Command-line arguments
 		logical :: arg_in_core = .false., arg_eig = .false., &
@@ -186,8 +187,7 @@ subroutine calc_eigenvalues(s, d, io)
 
 	double complex, allocatable :: a(:,:), w(:), vl(:,:), vr(:,:), work(:)
 
-	double precision :: dx, dy, wx, wy, wxmin, wxmax, wymin, wymax, &
-			wmargin, dwx, dwy
+	double precision :: dx, dy, wx, wy, wxmin, wxmax, wymin, wymax
 	double precision, allocatable :: rwork(:)
 
 	integer :: i, lda, info, nseed, ix, iy, ip, ip0, np, ldvl, ldvr, &
@@ -339,7 +339,7 @@ subroutine calc_eigenvalues(s, d, io)
 	end do
 	!$OMP end parallel do
 
-	write(*, '(a)') '|'
+	write(*, '(a)') repeat('=', np - ip0)//'|'
 	write(*,*)
 
 	close(id)
@@ -349,23 +349,10 @@ subroutine calc_eigenvalues(s, d, io)
 	write(im) neigen, wxmin, wxmax, wymin, wymax
 	close(im)
 
-	! TODO:  warn if eigenvalues are outside of plot bounds? Not an issue with
-	! off-core run
-
 	write(*,*) 'Eigenvalue bounds:'
 	write(*,*) 'Re in [', wxmin, ', ', wxmax, ']'
 	write(*,*) 'Im in [', wymin, ', ', wymax, ']'
 	write(*,*)
-
-	dwx = wxmax - wxmin
-	dwy = wymax - wymin
-
-	wmargin = 0.05
-
-	!write(*,*) 'With 5% margin:'
-	!write(*,*) 'Re in [', wxmin - wmargin*dx, ', ', wxmax + wmargin*dx, ']'
-	!write(*,*) 'Im in [', wymin - wmargin*dy, ', ', wymax + wmargin*dy, ']'
-	!write(*,*)
 
 end subroutine calc_eigenvalues
 
@@ -561,15 +548,23 @@ subroutine load_eigenvalues(s, d, io)
 	read(im) neigen, wxmin, wxmax, wymin, wymax
 	close(im)
 
-	! TODO: error for empty file(s)?  Should happen automatically from compiler
+	! TODO: include optional bounds override e.g. for zooming or margin
 
-	! TODO: include optional bounds override e.g. for zooming
-	s%xmin = wxmin
-	s%xmax = wxmax
-	s%ymin = wymin
-	s%ymax = wymax
+	dwx = wxmax - wxmin
+	dwy = wymax - wymin
+
+	!! TODO: add input setting for margin
+	!wmargin = 0.025d0
+	wmargin = 0.d0
+
+	s%xmin = wxmin - wmargin*dwx
+	s%xmax = wxmax + wmargin*dwx
+	s%ymin = wymin - wmargin*dwy
+	s%ymax = wymax + wmargin*dwy
+
 	dx = s%xmax - s%xmin
 	dy = s%ymax - s%ymin
+
 	if (dy > dx) then
 		s%ny = int(dy / dx * s%nx)
 	else
@@ -617,8 +612,6 @@ subroutine load_eigenvalues(s, d, io)
 
 		i = min(i, neigen)
 
-		!read(id) (wxs(j), wys(j), j = 1, i - i0)
-		!read(id) (ws(:,j), j = 1, i - i0)
 		read(id) ws(:, 1: i - i0)
 
 		!$OMP parallel do default(shared) private(j, ix, iy)
@@ -635,8 +628,6 @@ subroutine load_eigenvalues(s, d, io)
 			! Pixel coordinates.  Invert so y is up
 			ix = int(1    + (ws(1,j) - s%xmin) / dx * s%nx)
 			iy = int(s%ny - (ws(2,j) - s%ymin) / dy * s%ny)
-			!ix = int(1    + (wxs(j) - s%xmin) / dx * s%nx)
-			!iy = int(s%ny - (wys(j) - s%ymin) / dy * s%ny)
 
 			if (ix >= 1 .and. ix <= s%nx .and. &
 			    iy >= 1 .and. iy <= s%ny) then
@@ -649,9 +640,8 @@ subroutine load_eigenvalues(s, d, io)
 
 	end do
 
-	! TODO: finish any remainder progress
 
-	write(*, '(a)') '|'
+	write(*, '(a)') repeat('=', np - ip0)//'|'
 	write(*,*)
 
 	close(id)
@@ -663,16 +653,6 @@ subroutine load_eigenvalues(s, d, io)
 
 	!! TODO: benchmarking only
 	!stop
-
-	dwx = wxmax - wxmin
-	dwy = wymax - wymin
-
-	wmargin = 0.05
-
-	!write(*,*) 'With 5% margin:'
-	!write(*,*) 'Re in [', wxmin - wmargin*dx, ', ', wxmax + wmargin*dx, ']'
-	!write(*,*) 'Im in [', wymin - wmargin*dy, ', ', wymax + wmargin*dy, ']'
-	!write(*,*)
 
 end subroutine load_eigenvalues
 
@@ -718,6 +698,7 @@ subroutine load_args(s, io)
 			//id_plot//"          Plot eigenvalues from previous job"//newline &
 			//newline
 
+	! TODO: add structures to help text, e.g. Hessenberg, Toeplitz, ...
 	help = help_short &
 			//"Sample "//id_file//" contents are like this:"//newline &
 			//'{'//newline &
@@ -889,6 +870,7 @@ subroutine load_settings(s, io)
 	!call json%print()
 
 	call json%traverse(traverse_bomat_json)
+	if (io /= 0) return
 
 	! Mark non-zeros for string-specified structures
 	!
@@ -904,11 +886,9 @@ subroutine load_settings(s, io)
 
 		! Mark non-zero locations from template 1/0's matrix
 		k = 0
-		do i = 1, s%n
 		do j = 1, s%n
+		do i = 1, s%n
 
-			! Note the transpose from row-major template to Fortran default
-			! column-major
 			if (i <= j + 1) then
 				k = k + 1
 				s%inz(:, k) = [i, j]
@@ -1029,21 +1009,40 @@ subroutine traverse_bomat_json(json, p, finished)
 
 			call json%get_child(p, ij, pc, found)
 			call json%get(pc, '@', sval)
-			print *, 'sval = ', sval
+
+			!print *, 'sval = ', sval
 
 			! TODO:  implement other structures.  Check for conflicts, e.g.
-			! tridiagonal and Hessenberg
+			! tridiagonal and Hessenberg.  Explicit template conflicts with
+			! tridiagonal, Hessenberg, and dense.
+
 			if (sval == toeplitz_id) then
 				s%toeplitz = .true.
 
 			else if (sval == hessenberg_id) then
 				s%hessenberg = .true.
 
+			else if (sval == tridiagonal_id) then
+				s%tridiagonal = .true.
+
+			else if (sval == symmetric_id) then
+				s%symmetric = .true.
+
+			else if (sval == skew_sym_id) then
+				s%skew_sym = .true.
+
+			else if (sval == hermitian_id) then
+				s%hermitian = .true.
+
+			else if (sval == dense_id) then
+				s%dense = .true.
+
 			else
-				write(*,*) 'Error: unknown matrix structure string'
+				write(*,*) 'Error: unknown '//struct_id//' string'
 				write(*,*) 'String: '//sval
 				write(*,*)
-				! TODO: handle error, return
+				finished = .true.
+				io = ERR_JSON_SYNTAX
 
 			end if
 
@@ -1052,14 +1051,19 @@ subroutine traverse_bomat_json(json, p, finished)
 	else if (key == template_id) then
 
 		! Non-zero pattern template matrix
+		s%template_defined = .true.
+
 		ncount = json%count(p)
 
 		! Size of matrices
 		if (s%size_defined) then
 
 			if (s%n * s%n /= ncount) then
-				write(*,*) 'Error: template size does not match '//mat_size_id
-				! TODO: handle error, return
+				write(*,*) 'Error: '//template_id//' size does not match '
+						//mat_size_id
+				write(*,*)
+				finished = .true.
+				io = ERR_JSON_SYNTAX
 			end if
 
 		else
@@ -1070,8 +1074,10 @@ subroutine traverse_bomat_json(json, p, finished)
 			!print *, 's%n = ', s%n
 
 			if (s%n * s%n /= ncount) then
-				write(*,*) 'Error: matrix is not square'
-				! TODO: handle error, return
+				write(*,*) 'Error: '//template_id//' is not square'
+				write(*,*)
+				finished = .true.
+				io = ERR_JSON_SYNTAX
 			end if
 
 		end if
@@ -1097,8 +1103,8 @@ subroutine traverse_bomat_json(json, p, finished)
 
 		! Mark non-zero locations from template 1/0's matrix
 		k = 0
-		do i = 1, s%n
 		do j = 1, s%n
+		do i = 1, s%n
 
 			! Note the transpose from row-major template to Fortran default
 			! column-major
@@ -1131,9 +1137,8 @@ subroutine traverse_bomat_json(json, p, finished)
 		write(*,*)
 		call json%print_error_message()
 		write(*,*)
-
-		! TODO: handle this.  Failure could occur e.g. if a value is the wrong
-		! type
+		finished = .true.
+		io = ERR_JSON_SYNTAX
 
 	end if
 
@@ -1172,22 +1177,43 @@ subroutine bomat_settings_print(s)
 	write(iu, *) img_size_id , dlm, s%nx
 	write(iu, *) samples_id  , dlm, s%nsample
 
-	! Recreate template matrix just to print it
-	allocate(t2(s%n, s%n))
-	t2 = 0
-	do i = 1, size(s%inz, 2)
-		t2(s%inz(1,i), s%inz(2,i)) = 1
-	end do
+	if (s%template_defined) then
 
-	write(iu, *) template_id, dlm
-	write(iu, *) '['
-	do i = 1, s%n
-		write(iu, '(a)', advance = 'no') t
-		do j = 1, s%n
-			write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
+		! Recreate template matrix just to print it
+		allocate(t2(s%n, s%n))
+		t2 = 0
+		do i = 1, size(s%inz, 2)
+			t2(s%inz(1,i), s%inz(2,i)) = 1
 		end do
-	write(iu, *)
-	end do
+
+		write(iu, *) template_id, dlm
+		write(iu, *) '['
+		do i = 1, s%n
+			write(iu, '(a)', advance = 'no') t
+			do j = 1, s%n
+				write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
+			end do
+		write(iu, *)
+		end do
+		write(iu, *) ']'
+
+	end if
+
+	if (s%size_defined) then
+		write(iu, *) mat_size_id, dlm, s%n
+	end if
+
+	write(iu, *) struct_id, dlm
+	write(iu, *) '['
+
+	if (s%toeplitz)    write(iu, *) t, toeplitz_id   , vdm
+	if (s%tridiagonal) write(iu, *) t, tridiagonal_id, vdm
+	if (s%hessenberg)  write(iu, *) t, hessenberg_id , vdm
+	if (s%symmetric)   write(iu, *) t, symmetric_id  , vdm
+	if (s%skew_sym)    write(iu, *) t, skew_sym_id   , vdm
+	if (s%hermitian)   write(iu, *) t, hermitian_id  , vdm
+	if (s%dense)       write(iu, *) t, dense_id      , vdm
+
 	write(iu, *) ']'
 
 	write(iu, *) population_id, dlm
@@ -1197,8 +1223,6 @@ subroutine bomat_settings_print(s)
 		                                     aimag(s%p(i)), vdm
 	end do
 	write(iu, *) ']'
-
-	! TODO: print structure options, specified size, etc.
 
 	write(iu, *)
 
