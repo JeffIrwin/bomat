@@ -196,8 +196,6 @@ subroutine calc_eigenvalues(s, d, io)
 
 	integer, allocatable :: seed(:)
 
-	logical :: maxinit = .false.
-
 	! Not actually thrown from here
 	io = 0
 
@@ -254,7 +252,9 @@ subroutine calc_eigenvalues(s, d, io)
 	write(*,*) '|'//repeat('-', np)//'|'
 	write(*, '(a)', advance = 'no') ' |'
 
-	!$OMP parallel do default(shared) &
+	!$OMP parallel do default(shared) schedule(static) &
+	!$OMP&    reduction(min:wxmin,wymin) reduction(+:neigen) &
+	!$OMP&    reduction(max:wxmax,wymax) &
 	!$OMP&    private(a, i, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
 	do is = 1, s%nsample
 
@@ -268,12 +268,14 @@ subroutine calc_eigenvalues(s, d, io)
 		end if
 		!$OMP end critical
 
+		!$OMP critical
 		! TODO: use abstract interfaces.  c.f. blog
 		if (s%toeplitz) then
 			a = random_toeplitz(s)
 		else
 			a = random_matrix(s)
 		end if
+		!$OMP end critical
 
 		!! There is no Fortran edit descriptor for complex numbers :(
 		!print *, "a = "
@@ -291,27 +293,11 @@ subroutine calc_eigenvalues(s, d, io)
 				wx =  real(w(i))
 				wy = aimag(w(i))
 
-				!$OMP critical
-
-				! TODO: these could all be done with OMP reduction
-				! operators
-
 				neigen = neigen + 1
-
-				if (.not. maxinit) then
-					maxinit = .true.
-					wxmin = wx
-					wxmax = wx
-					wymin = wy
-					wymax = wy
-				else
-					wxmin = min(wxmin, wx)
-					wxmax = max(wxmax, wx)
-					wymin = min(wymin, wy)
-					wymax = max(wymax, wy)
-				end if
-
-				!$OMP end critical
+				wxmin = min(wxmin, wx)
+				wxmax = max(wxmax, wx)
+				wymin = min(wymin, wy)
+				wymax = max(wymax, wy)
 
 				if (.not. s%arg_in_core) then
 
@@ -632,7 +618,9 @@ subroutine load_eigenvalues(s, d, io)
 			if (ix >= 1 .and. ix <= s%nx .and. &
 			    iy >= 1 .and. iy <= s%ny) then
 
+				!$OMP critical
 				d%hist(ix, iy) = d%hist(ix, iy) + 1
+				!$OMP end critical
 
 			end if
 		end do
