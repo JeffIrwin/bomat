@@ -1,0 +1,119 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+
+		## 3a, 1/29 
+		#1, 0,
+		#-1, 0,
+		#0, 0.5
+
+		## 1/28.  nice cardioid
+		# 0 , 1,
+		# 1, 0,
+		#-1, 0
+
+		## Never posted?
+		# 0         ,  0.5,
+		#-0.8660254 , -0.5,
+		# 0.8660254 , -0.5,
+
+		## 3c, 1/30
+		#1, -1,
+		#1, 0,
+		#1, 1
+
+		## 1/29.  Small triangle opposite of 6a 1/31
+		# 0         ,  1  ,
+		#-0.8660254 , -0.5,
+		# 0.8660254 , -0.5,
+		# 0         , -0.1,
+		# 0.08660254,  0.05,
+		#-0.08660254,  0.05
+
+		## Symmetric about rotated axis.  Never posted.
+		#1, 0,
+		#1, 0.1,
+		#-1, 0,
+		#-1, -0.1
+
+		## 1/29
+		#1, -0.3,
+		#1, 0.1,
+		#-1, -0.3,
+		#-1,  0.1
+
+		## 1/25
+		#1, 0,
+		#0, 1,
+		#-1, 0,
+		#0, -1
+
+		## 1/28
+		#1, 0,
+		#0, 0.1,
+		#-1, 0,
+		#0, -0.1
+
+		## 1/26
+		#0, 1,
+		#0.8660254, 0.5,
+		#-0.8660254, 0.5,
+		#0.8660254, -0.5,
+		#-0.8660254, -0.5,
+		#0, -1
+
+		## 1/28
+		#0, 1,
+		#0.7818315, 0.6234898,
+		#0.9749279, -0.2225209,
+		#0.4338837, -0.9009689,
+		#-0.4338837, -0.9009689,
+		#-0.9749279, -0.2225209,
+		#-0.7818315,  0.6234898
+
+		1, 0,
+		-1, 0,
+		0, -1,
+		0, -0.2
+
+	],
+
+	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
+	# from population.  This JSON array is rank-1, but it is reshaped in
+	# a row-major sense into a rank-2 matrix
+	"Template matrix":
+	[
+		1, 1, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 0, 0, 0, 0, 0,
+		0, 1, 1, 1, 0, 0, 0, 0,
+		0, 0, 1, 1, 1, 0, 0, 0,
+		0, 0, 0, 1, 1, 1, 0, 0,
+		0, 0, 0, 0, 1, 1, 1, 0,
+		0, 0, 0, 0, 0, 1, 1, 1,
+		0, 0, 0, 0, 0, 0, 1, 1
+	],
+
+	"Samples": 1000000,
+
+	"Image size": 1080,#1920,#3840,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Inferno (matplotlib)"
+	"Colormap name": "Magma (matplotlib)"
+#	"Colormap name": "Viridis (matplotlib)"
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Blue Orange (divergent)"
+#	"Colormap name": "Black, Blue and White"
+#	"Colormap name": "Asymmtrical Earth Tones (6_21b)"
+#	"Colormap name": "gist_earth"
+
+#	"Colormap file": "custom-maps.json",
+#	"Colormap name": "bisexual"
+#	"Colormap name": "cyan-magenta"
+
+}
+

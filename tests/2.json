@@ -1,0 +1,28 @@
+{
+
+	# This is a comment (non-standard JSON extension)
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		 1  ,  0,
+		-1  ,  0,
+		 0  ,  1,
+		 0  , -1
+	],
+
+	"Matrix size": 8,
+	"Matrix structure":
+	[
+		"Hessenberg"
+	],
+
+	"Samples": 100000,
+
+	"Image size": 480,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.0.0.xml",
+	"Colormap name": "Blue to Red Rainbow"
+
+}

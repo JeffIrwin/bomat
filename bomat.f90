@@ -8,22 +8,46 @@ module mbomat
 	! My name a bomat.  Very nice!
 	character(len = *), parameter :: me = "bomat"
 
-	character, parameter :: nullc = char(0), newline = char(10)
+	character, parameter :: nullc = char(0), t = char(9), newline = char(10)
 
-	double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
+	! JSON keys
+	character(len = *), parameter :: &
+		population_id = 'Population'      , &
+		struct_id     = 'Matrix structure', &
+		mat_size_id   = 'Matrix size'     , &
+		template_id   = 'Template matrix' , &
+		samples_id    = 'Samples'         , &
+		img_size_id   = 'Image size'      , &
+		margin_id     = 'Margin'          , &
+		fcolormap_id  = 'Colormap file'   , &
+		colormap_id   = 'Colormap name'
 
-	double precision, parameter :: pi = 4.d0 * atan(1.d0)
+	! Other identifiers
+	character(len = *), parameter :: &
+		toeplitz_id    = "Toeplitz"      , &
+		tridiagonal_id = "Tridiagonal"   , &
+		hessenberg_id  = "Hessenberg"    , &
+		symmetric_id   = "Symmetric"     , &
+		skew_sym_id    = "Skew symmetric", &
+		hermitian_id   = "Hermitian"     , &
+		dense_id       = "Dense"
+
+	!double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
+	!double precision, parameter :: pi = 4.d0 * atan(1.d0)
 
 	! C++ routines from colormapper submodule
 	integer, external :: load_colormap, writepng
 
+	integer, parameter :: debug = 0
+
 	integer, parameter :: nrgb = 3
 
 	integer, parameter :: &
-			ERR_LOAD_JSON = -4, &
-			ERR_CMD_ARGS  = -3, &
-			ERR_COLORMAP  = -2, &
-			ERR_WRITEPNG  = -1
+			ERR_JSON_SYNTAX = -5, &
+			ERR_LOAD_JSON   = -4, &
+			ERR_CMD_ARGS    = -3, &
+			ERR_COLORMAP    = -2, &
+			ERR_WRITEPNG    = -1
 
 	!********
 
@@ -34,16 +58,31 @@ module mbomat
 		character(len = :), allocatable :: f, fcolormap, colormap, fjson, &
 				fdata, fmeta, fpng
 
-		integer :: n, np, nx, ny
-		integer(kind = 8) :: nsample
+		integer :: n, np, nx = 0, ny
+		integer(kind = 8) :: nsample = 0
 		integer, allocatable :: inz(:,:)
 
 		double complex, allocatable :: p(:)
 
-		double precision :: xmin, xmax, ymin, ymax
+		double precision :: xmin, xmax, ymin, ymax, margin = 0.d0
 
+		logical :: size_defined = .false., template_defined = .false.
+
+		! Command-line arguments
 		logical :: arg_in_core = .false., arg_eig = .false., &
 				arg_plot = .false., arg_help = .false.
+
+		! TODO:  add n-diagonal option, with n a variable int, e.g. tridiagonal,
+		! pentadiagonal, etc. (generalization of tridiagonal)
+
+		! Matrix structure options
+		logical :: toeplitz = .false., tridiagonal = .false., &
+				hessenberg = .false., symmetric = .false., &
+				skew_sym = .false., hermitian = .false., &
+				dense = .false.
+
+		contains
+			procedure :: print => bomat_settings_print
 
 	end type bomat_settings
 
@@ -152,8 +191,7 @@ subroutine calc_eigenvalues(s, d, io)
 
 	double complex, allocatable :: a(:,:), w(:), vl(:,:), vr(:,:), work(:)
 
-	double precision :: r, dx, dy, wx, wy, wxmin, wxmax, wymin, wymax, &
-			wmargin, dwx, dwy
+	double precision :: dx, dy, wx, wy, wxmin, wxmax, wymin, wymax
 	double precision, allocatable :: rwork(:)
 
 	integer :: i, lda, info, nseed, ix, iy, ip, ip0, np, ldvl, ldvr, &
@@ -161,8 +199,6 @@ subroutine calc_eigenvalues(s, d, io)
 	integer(kind = 8) :: is, ist, neigen
 
 	integer, allocatable :: seed(:)
-
-	logical :: maxinit = .false.
 
 	! Not actually thrown from here
 	io = 0
@@ -205,9 +241,11 @@ subroutine calc_eigenvalues(s, d, io)
 	dx = s%xmax - s%xmin
 	dy = s%ymax - s%ymin
 
-	! Eigenvalue density histogram
-	allocate(d%hist(s%nx, s%ny))
-	d%hist = 0
+	if (s%arg_in_core) then
+		! Eigenvalue density histogram
+		allocate(d%hist(s%nx, s%ny))
+		d%hist = 0
+	end if
 
 	neigen = 0
 
@@ -220,8 +258,10 @@ subroutine calc_eigenvalues(s, d, io)
 	write(*,*) '|'//repeat('-', np)//'|'
 	write(*, '(a)', advance = 'no') ' |'
 
-	!$OMP parallel do default(shared) &
-	!$OMP&    private(a, i, r, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
+	!$OMP parallel do default(shared) schedule(static) &
+	!$OMP&    reduction(min: wxmin, wymin) reduction(+: neigen) &
+	!$OMP&    reduction(max: wxmax, wymax) &
+	!$OMP&    private(a, i, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
 	do is = 1, s%nsample
 
 		! Progress bar
@@ -235,17 +275,19 @@ subroutine calc_eigenvalues(s, d, io)
 		end if
 		!$OMP end critical
 
-		! Fill non-zeros of matrix a randomly from population
-		a = 0.d0
-		do i = 1, size(s%inz, 2)
-			call random_number(r)
-			a(s%inz(1,i), s%inz(2,i)) = s%p(floor(r * s%np) + 1)
-		end do
+		!$OMP critical
+		! TODO: use abstract interfaces.  c.f. blog
+		if (s%toeplitz) then
+			a = random_toeplitz(s)
+		else
+			a = random_matrix(s)
+		end if
+		!$OMP end critical
 
 		!! There is no Fortran edit descriptor for complex numbers :(
 		!print *, "a = "
 		!print "(16es14.4)", a
-		!print *, "a = ", a
+		!!print *, "a = ", a
 
 		! Call LAPACK to get eigenvalues (but not eigenvectors)
 		call zgeev(jobvl, jobvr, s%n, a, lda, w, vl, ldvl, vr, ldvr, &
@@ -255,65 +297,42 @@ subroutine calc_eigenvalues(s, d, io)
 
 			do i = 1, s%n
 
-				!! Remove real line.  TODO: make this optional.  Handle in
-				!! draw_plot instead?  Could set tolerance in pixels there
-				!! instead of complex units
+				wx =  real(w(i))
+				wy = aimag(w(i))
 
-				!if (abs(imagpart(w(i))) > 1.d-6) then
+				neigen = neigen + 1
+				wxmin = min(wxmin, wx)
+				wxmax = max(wxmax, wx)
+				wymin = min(wymin, wy)
+				wymax = max(wymax, wy)
 
-					wx =  real(w(i))
-					wy = aimag(w(i))
+				if (.not. s%arg_in_core) then
 
 					!$OMP critical
-
-					! TODO: these could all be done with OMP reduction
-					! operators
-
-					neigen = neigen + 1
-
-					if (.not. maxinit) then
-						maxinit = .true.
-						wxmin = wx
-						wxmax = wx
-						wymin = wy
-						wymax = wy
-					else
-						wxmin = min(wxmin, wx)
-						wxmax = max(wxmax, wx)
-						wymin = min(wymin, wy)
-						wymax = max(wymax, wy)
-					end if
-
+					write(id) wx, wy
 					!$OMP end critical
 
-					if (.not. s%arg_in_core) then
+				else
+
+					! Pixel coordinates.  Invert so y is up
+					ix = int(1    + (wx - s%xmin) / dx * s%nx)
+					iy = int(s%ny - (wy - s%ymin) / dy * s%ny)
+
+					if (ix >= 1 .and. ix <= s%nx .and. &
+					    iy >= 1 .and. iy <= s%ny) then
 
 						!$OMP critical
-						write(id) wx, wy
+						d%hist(ix, iy) = d%hist(ix, iy) + 1
 						!$OMP end critical
 
-					else
-
-						! Pixel coordinates.  Invert so y is up
-						ix = int(1    + (wx - s%xmin) / dx * s%nx)
-						iy = int(s%ny - (wy - s%ymin) / dy * s%ny)
-
-						if (ix >= 1 .and. ix <= s%nx .and. &
-						    iy >= 1 .and. iy <= s%ny) then
-
-							!$OMP critical
-							d%hist(ix, iy) = d%hist(ix, iy) + 1
-							!$OMP end critical
-
-						end if
 					end if
-				!end if
+				end if
 			end do
 		end if
 	end do
 	!$OMP end parallel do
 
-	write(*, '(a)') '|'
+	write(*, '(a)') repeat('=', np - ip0)//'|'
 	write(*,*)
 
 	close(id)
@@ -323,25 +342,79 @@ subroutine calc_eigenvalues(s, d, io)
 	write(im) neigen, wxmin, wxmax, wymin, wymax
 	close(im)
 
-	! TODO:  warn if eigenvalues are outside of plot bounds? Not an issue with
-	! 2-pass run
-
 	write(*,*) 'Eigenvalue bounds:'
 	write(*,*) 'Re in [', wxmin, ', ', wxmax, ']'
 	write(*,*) 'Im in [', wymin, ', ', wymax, ']'
 	write(*,*)
 
-	dwx = wxmax - wxmin
-	dwy = wymax - wymin
-
-	wmargin = 0.05
-
-	!write(*,*) 'With 5% margin:'
-	!write(*,*) 'Re in [', wxmin - wmargin*dx, ', ', wxmax + wmargin*dx, ']'
-	!write(*,*) 'Im in [', wymin - wmargin*dy, ', ', wymax + wmargin*dy, ']'
-	!write(*,*)
-
 end subroutine calc_eigenvalues
+
+!=======================================================================
+
+function random_matrix(s) result(a)
+
+	! Make a random matrix with no specific structure with entries sampled from
+	! the population
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double precision :: r
+
+	integer :: i
+
+	! Fill non-zeros of matrix a randomly from population
+	a = 0.d0
+	do i = 1, size(s%inz, 2)
+		call random_number(r)
+		a(s%inz(1,i), s%inz(2,i)) = s%p(floor(r * s%np) + 1)
+	end do
+
+end function random_matrix
+
+!=======================================================================
+
+function random_toeplitz(s) result(a)
+
+	! Make a random Toeplitz matrix.  If you don't know what Toeplitz is, a 4x4
+	! is like this:
+	!
+	! [
+	!     e f g h
+	!     d e f g
+	!     c d e f
+	!     b c d e
+	! ]
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double complex :: diags(-(s%n - 1): s%n - 1)
+
+	double precision :: r
+
+	integer :: i, j, k
+
+	do i = -(s%n - 1), s%n - 1
+		call random_number(r)
+		diags(i) = s%p(floor(r * s%np) + 1)
+	end do
+
+	! Template-based sparse Toeplitz
+	a = 0.d0
+	do k = 1, size(s%inz, 2)
+		i = s%inz(1,k)
+		j = s%inz(2,k)
+		a(i, j) = diags(i - j)
+	end do
+
+end function random_toeplitz
 
 !=======================================================================
 
@@ -361,8 +434,8 @@ subroutine draw_plot(s, d, io)
 
 	double precision :: xi, xi0
 
-	integer :: i, j, nnzh, nxy
-	integer, allocatable :: idx(:), hist1(:)
+	integer :: i, j, ix, iy, nnzh, nxy, h, h0
+	integer, allocatable :: idx(:)!, hist1(:)
 
 	! Not actually thrown from here
 	io = 0
@@ -370,11 +443,7 @@ subroutine draw_plot(s, d, io)
 	write(*,*) 'Coloring pixels ...'
 	write(*,*)
 
-	! TODO: reshape to img(nrgb, s%nx(,*)s%ny)?  C++ call shouldn't care
-
 	!print *, 'd%hist = ', d%hist(1:100,1)
-
-	! TODO: can C allocate idx inside sortidx() function?
 
 	! Note that sortidx treats hist as a rank-1 array and returns 0-based rank-1
 	! indices in idx
@@ -394,17 +463,28 @@ subroutine draw_plot(s, d, io)
 	write(*,*) 'Non-zero pixel fraction = ', real(nnzh) / nxy
 	write(*,*)
 
-	! TODO:  avoid reshaping.  Do 1d/2d index math instead?  Or can we use
-	! move_alloc for different ranks?
-	allocate(hist1(nxy))
-	hist1 = reshape(d%hist, [nxy])
+	! TODO:  benchmark the reshape difference here with -p and large img
+	!allocate(hist1(nxy))
+	!hist1 = reshape(d%hist, [nxy])
 
 	j = 0
+	h0 = 0
 	do i = 1, nxy
+		!h = hist1(idx(i) + 1)
 
-		if (hist1(idx(i) + 1) == 0) then
+		! Convert 1D 0-based index to 2D 1-based indices.  This is more complex
+		! than reshaping the hist array, but it doesn't require copying
+		! a potentially large amount of data
+
+		!iy = (idx(i) + 1) / s%nx
+		iy = idx(i) / s%nx + 1
+		ix = mod(idx(i), s%nx) + 1
+
+		h = d%hist(ix,iy)
+
+		if (h == 0) then
 			xi = 0.d0
-		else if (i > 0 .and. hist1(idx(i) + 1) == hist1(idx(i-1) + 1)) then
+		else if (i > 0 .and. h == h0) then
 			j = j + 1
 			xi = xi0
 		else
@@ -416,10 +496,11 @@ subroutine draw_plot(s, d, io)
 		call map(xi, rgb)
 		d%img(idx(i) * nrgb + 1: idx(i) * nrgb + 3) = rgb
 
+		h0 = h
 	end do
 
-	! TODO:  deallocate arrays as soon as they're done being used
-
+	! Deallocate arrays as soon as they're done being used?  This is almost the
+	! last subroutine anyway, other than writepng.
 	!deallocate(d%hist)
 
 end subroutine draw_plot
@@ -443,7 +524,7 @@ subroutine load_eigenvalues(s, d, io)
 	integer, parameter :: nchunk = 1024 ** 2  ! optimal value?
 
 	double precision :: dx, dy, wxmin, wxmax, wymin, wymax, &
-			wmargin, dwx, dwy
+			dwx, dwy
 
 	!! Parameterized array sizes crash gfortran for large nchunk.  Allocatable
 	!! arrays work better, may be stack/heap difference
@@ -468,15 +549,19 @@ subroutine load_eigenvalues(s, d, io)
 	read(im) neigen, wxmin, wxmax, wymin, wymax
 	close(im)
 
-	! TODO: error for empty file(s)?  Should happen automatically from compiler
+	! TODO: include optional bounds override e.g. for zooming or margin
 
-	! TODO: include optional bounds override e.g. for zooming
-	s%xmin = wxmin
-	s%xmax = wxmax
-	s%ymin = wymin
-	s%ymax = wymax
+	dwx = wxmax - wxmin
+	dwy = wymax - wymin
+
+	s%xmin = wxmin - s%margin * dwx
+	s%xmax = wxmax + s%margin * dwx
+	s%ymin = wymin - s%margin * dwy
+	s%ymax = wymax + s%margin * dwy
+
 	dx = s%xmax - s%xmin
 	dy = s%ymax - s%ymin
+
 	if (dy > dx) then
 		s%ny = int(dy / dx * s%nx)
 	else
@@ -524,8 +609,6 @@ subroutine load_eigenvalues(s, d, io)
 
 		i = min(i, neigen)
 
-		!read(id) (wxs(j), wys(j), j = 1, i - i0)
-		!read(id) (ws(:,j), j = 1, i - i0)
 		read(id) ws(:, 1: i - i0)
 
 		!$OMP parallel do default(shared) private(j, ix, iy)
@@ -539,30 +622,25 @@ subroutine load_eigenvalues(s, d, io)
 			!	write(*, '(a)', advance = 'no') '='
 			!end if
 
-			!! Remove real line.  TODO: make this optional
-			!if (abs(imagpart(w(i))) > 1.d-6) then
+			! Pixel coordinates.  Invert so y is up
+			ix = int(1    + (ws(1,j) - s%xmin) / dx * s%nx)
+			iy = int(s%ny - (ws(2,j) - s%ymin) / dy * s%ny)
 
-				! Pixel coordinates.  Invert so y is up
-				ix = int(1    + (ws(1,j) - s%xmin) / dx * s%nx)
-				iy = int(s%ny - (ws(2,j) - s%ymin) / dy * s%ny)
-				!ix = int(1    + (wxs(j) - s%xmin) / dx * s%nx)
-				!iy = int(s%ny - (wys(j) - s%ymin) / dy * s%ny)
+			if (ix >= 1 .and. ix <= s%nx .and. &
+			    iy >= 1 .and. iy <= s%ny) then
 
-				if (ix >= 1 .and. ix <= s%nx .and. &
-				    iy >= 1 .and. iy <= s%ny) then
+				!$OMP critical
+				d%hist(ix, iy) = d%hist(ix, iy) + 1
+				!$OMP end critical
 
-					d%hist(ix, iy) = d%hist(ix, iy) + 1
-
-				end if
-			!end if
+			end if
 		end do
 		!$OMP end parallel do
 
 	end do
 
-	! TODO: finish any remainder progress
 
-	write(*, '(a)') '|'
+	write(*, '(a)') repeat('=', np - ip0)//'|'
 	write(*,*)
 
 	close(id)
@@ -574,16 +652,6 @@ subroutine load_eigenvalues(s, d, io)
 
 	!! TODO: benchmarking only
 	!stop
-
-	dwx = wxmax - wxmin
-	dwy = wymax - wymin
-
-	wmargin = 0.05
-
-	!write(*,*) 'With 5% margin:'
-	!write(*,*) 'Re in [', wxmin - wmargin*dx, ', ', wxmax + wmargin*dx, ']'
-	!write(*,*) 'Im in [', wymin - wmargin*dy, ', ', wymax + wmargin*dy, ']'
-	!write(*,*)
 
 end subroutine load_eigenvalues
 
@@ -600,40 +668,44 @@ subroutine load_args(s, io)
 	!********
 
 	character :: argv*256
-	character(len = :), allocatable :: help
+	character(len = :), allocatable :: help, help_short
 	character(len = *), parameter :: &
-			id_h    = "-h"    , &
-			id_help = "--help", &
-			id_inco = "-i"    , &
-			id_plot = "-p"    , &
+			id_file = "FILE.JSON" , &
+			id_h    = "-h"        , &
+			id_help = "--help"    , &
+			id_inco = "-i"        , &
+			id_plot = "-p"        , &
 			id_eig  = "-e"
 
 	integer :: argc, i, ipos
 
 	io = 0
 
-	help = "" &
+	help_short = "" &
 			//"Usage: "//me//" ["//id_h//"] ["//id_plot//"] ["//id_eig//"] " &
-			//"FILE.JSON"//newline &
+			//id_file//newline &
 			//newline &
 			//"Calculate Bohemian matrix eigenvalues and export a plot to a " &
 			//"PNG file"//newline &
 			//newline &
 			//"Positional arguments:"//newline &
-			//"FILE.JSON   Configuration filename for setting inputs"//newline &
+			//id_file//"   Configuration filename for setting inputs"//newline &
 			//newline &
 			//"Optional arguments:"//newline &
 			//id_h//", "//id_help//"  Show this help message and exit"//newline &
 			//id_eig //"          Calculate and export eigenvalues without plotting"//newline &
 			//id_plot//"          Plot eigenvalues from previous job"//newline &
-			//newline &
-			//"Sample FILE.JSON contents are like this:"//newline &
+			//newline
+
+	! TODO: add structures to help text, e.g. Hessenberg, Toeplitz, ...
+	help = help_short &
+			//"Sample "//id_file//" contents are like this:"//newline &
 			//'{'//newline &
 			//newline &
 			//'	# This is a comment (non-standard JSON extension)'//newline &
 			//newline &
 			//'	# Complex numbers'//newline &
-			//'	"Population":'//newline &
+			//'	"'//population_id//'":'//newline &
 			//'	['//newline &
 			//'		# Re, Im'//newline &
 			//'		 0        ,  1  ,'//newline &
@@ -644,7 +716,7 @@ subroutine load_args(s, io)
 			//'	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly'//newline &
 			//'	# from population.  This JSON array is rank-1, but it is reshaped in'//newline &
 			//'	# a row-major sense into a rank-2 matrix'//newline &
-			//'	"Template matrix":'//newline &
+			//'	"'//template_id//'":'//newline &
 			//'	['//newline &
 			//'		1, 1, 0, 0, 0, 0, 0, 0,'//newline &
 			//'		1, 1, 1, 0, 0, 0, 0, 0,'//newline &
@@ -656,11 +728,11 @@ subroutine load_args(s, io)
 			//'		0, 0, 0, 0, 0, 0, 1, 1'//newline &
 			//'	],'//newline &
 			//newline &
-			//'	"Samples": 1000000,'//newline &
-			//'	"Image size": 1920,'//newline &
+			//'	"'//samples_id//'": 1000000,'//newline &
+			//'	"'//img_size_id//'": 1920,'//newline &
 			//newline &
-			//'	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",'//newline &
-			//'	"Colormap name": "Magma (matplotlib)"'//newline &
+			//'	"'//fcolormap_id//'": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",'//newline &
+			//'	"'//colormap_id//'": "Magma (matplotlib)"'//newline &
 			//newline &
 			//'}'//newline &
 			//newline &
@@ -671,11 +743,14 @@ subroutine load_args(s, io)
 
 	argc = command_argument_count()
 
-	!! TODO:  re-enable this check to require input file.  print help too
-	!if (argc < 1) then
-	!	io = ERR_CMD_ARGS
-	!	return
-	!end if
+	if (argc < 1) then
+		write(*,*) 'Error: required positional argument '//id_file &
+				//' is not defined'
+		write(*,*)
+		write(*, '(a)') help_short
+		io = ERR_CMD_ARGS
+		return
+	end if
 
 	ipos = 0
 	i = 0
@@ -754,6 +829,8 @@ subroutine load_settings(s, io)
 
 	!********
 
+	integer :: i, j, k, nnonzero
+
 	type(json_file) :: json
 
 	! Not actually thrown from here
@@ -768,34 +845,6 @@ subroutine load_settings(s, io)
 	s%fcolormap = ""
 	s%colormap  = ""
 
-	call json%initialize()
-	call json%load(filename = s%fjson)
-	if (json%failed()) then
-		write(*,*) 'Error:'
-		write(*,*) 'Could not load file "'//s%fjson//'"'
-		write(*,*)
-		call json%print_error_message()
-		io = ERR_LOAD_JSON
-		return
-	end if
-
-	! TODO:  make a custom settings printer, with population and template neatly
-	! formatted instead of 1 number per line
-	call json%print()
-	write(*,*)
-
-	call json%traverse(traverse_bomat_json)
-
-	!print *, 'size(s%inz) = ', size(s%inz)
-	!print *, 'size(s%inz)  = ', size(s%inz)
-	!print *, 's%fcolormap = ', s%fcolormap
-
-	!! TODO: finalize the global object, and the json object too
-	!call destroy(s)
-
-	! Tridiagonal (TODO: add enum options for things like this, Toeplitz,
-	! Hermitian, symmetric, skew-symmetric, fully-dense, etc.)
-
 	! Image bounds in complex plane.  Careful with aspect ratio.  These are
 	! reset automatically later in a 2-pass run.  Check thesis.  Is ~sqrt(n)
 	! better?
@@ -804,182 +853,56 @@ subroutine load_settings(s, io)
 	s%ymin = -3.0
 	s%ymax =  3.0
 
+	call json%initialize()
+	call json%load(filename = s%fjson)
+	if (json%failed()) then
+		write(*,*) 'Error:'
+		write(*,*) 'Could not load file "'//s%fjson//'"'
+		write(*,*)
+		call json%print_error_message()
+		write(*,*)
+		io = ERR_LOAD_JSON
+		return
+	end if
 
+	!! One number per line in arrays.  Not great for template matrix
+	!call json%print()
 
+	call json%traverse(traverse_bomat_json)
+	if (io /= 0) return
 
+	! Mark non-zeros for string-specified structures
+	!
+	! TODO: implement other options besides Hessenberg
+	if (s%hessenberg) then
 
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(3) = cmplx( 0.d0,  0.5d0, kind = 8)
+		! Upper Hessenberg.  Lower Hessenberg is not implemented, but would it
+		! make a difference?
+		nnonzero = s%n * (s%n + 1) / 2 + s%n - 1
 
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(1) = cmplx(0.5d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	!s%p(2) = cmplx(0.d0,  1.d0, kind = 8)
-	!s%p(3) = cmplx(0.d0, -1.d0, kind = 8)
+		! Indices of non-zeros
+		allocate(s%inz(2, nnonzero))
 
-	!s%p(1) = cmplx(1.d0, -1.d0, kind = 8)
-	!s%p(2) = cmplx(1.d0,  0.d0, kind = 8)
-	!s%p(3) = cmplx(1.d0,  1.d0, kind = 8)
+		! Mark non-zero locations from template 1/0's matrix
+		k = 0
+		do j = 1, s%n
+		do i = 1, s%n
 
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 3.d0), sin(2.d0 * pi / 3.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 3.d0), sin(4.d0 * pi / 3.d0), kind = 8)
-	!s%p(4:6) = -0.1 * s%p(1:3)
-	!s%p = s%p * exp(ic * 0.5d0 * pi)
+			if (i <= j + 1) then
+				k = k + 1
+				s%inz(:, k) = [i, j]
+			end if
 
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(4) = cmplx(-1.d0, -0.1d0, kind = 8)
+		end do
+		end do
 
-	!s%p(1) = cmplx( 1.d0, -0.3d0, kind = 8)
-	!s%p(2) = cmplx( 1.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0, -0.3d0, kind = 8)
-	!s%p(4) = cmplx(-1.d0,  0.1d0, kind = 8)
+	end if
 
-	!s%p(1) = cmplx( 1.d0,  0.d0, kind = 8)
-	!s%p(2) = cmplx( 0.d0,  1.d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0, kind = 8)
-	!s%p(4) = cmplx( 0.d0, -1.d0, kind = 8)
+	call s%print()
 
-	!s%p(1) = cmplx( 1.d0,  0.d0 , kind = 8)
-	!s%p(2) = cmplx( 0.d0,  0.1d0, kind = 8)
-	!s%p(3) = cmplx(-1.d0,  0.d0 , kind = 8)
-	!s%p(4) = cmplx( 0.d0, -0.1d0, kind = 8)
-
-	!!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(1) = cmplx(0.1d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 5.d0), sin(2.d0 * pi / 5.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 5.d0), sin(4.d0 * pi / 5.d0), kind = 8)
-	!s%p(4) = cmplx(cos(6.d0 * pi / 5.d0), sin(6.d0 * pi / 5.d0), kind = 8)
-	!s%p(5) = cmplx(cos(8.d0 * pi / 5.d0), sin(8.d0 * pi / 5.d0), kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos(2.d0 * pi / 6.d0), sin(2.d0 * pi / 6.d0), kind = 8)
-	!s%p(3) = cmplx(cos(4.d0 * pi / 6.d0), sin(4.d0 * pi / 6.d0), kind = 8)
-	!s%p(4) = cmplx(cos(6.d0 * pi / 6.d0), sin(6.d0 * pi / 6.d0), kind = 8)
-	!s%p(5) = cmplx(cos(8.d0 * pi / 6.d0), sin(8.d0 * pi / 6.d0), kind = 8)
-	!s%p(6) = cmplx(cos(1.d1 * pi / 6.d0), sin(1.d1 * pi / 6.d0), kind = 8)
-
-	!s%p(1) = cmplx(1.d0, 0.d0, kind = 8)
-	!s%p(2) = cmplx(cos( 2.d0 * pi / 7.d0), sin( 2.d0 * pi / 7.d0), kind = 8)
-	!s%p(3) = cmplx(cos( 4.d0 * pi / 7.d0), sin( 4.d0 * pi / 7.d0), kind = 8)
-	!s%p(4) = cmplx(cos( 6.d0 * pi / 7.d0), sin( 6.d0 * pi / 7.d0), kind = 8)
-	!s%p(5) = cmplx(cos( 8.d0 * pi / 7.d0), sin( 8.d0 * pi / 7.d0), kind = 8)
-	!s%p(6) = cmplx(cos( 1.d1 * pi / 7.d0), sin( 1.d1 * pi / 7.d0), kind = 8)
-	!s%p(7) = cmplx(cos(1.2d1 * pi / 7.d0), sin(1.2d1 * pi / 7.d0), kind = 8)
-
-	!! Upper triangle, main diagonal, and first band below diagonal
-	!template = [                &
-	!	1, 1, 1, 1, 1, 1, 1, 1, &
-	!	1, 1, 1, 1, 1, 1, 1, 1, &
-	!	0, 1, 1, 1, 1, 1, 1, 1, &
-	!	0, 0, 1, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 8x8
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 7x7
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! 3.5-ish diagonal
-	!template = [                &
-	!	1, 1, 0, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! Quad-diagonal.  More non-zeros seem to just fill in the sparse areas and
-	!! make the plot more washed-out and less interesting
-	!template = [                &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	0, 1, 1, 1, 1, 0, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 0, 1, 1, 1, 1, 0, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 0, 1, 1  &
-	!	]
-
-	!! Pentadiagonal.  More non-zeros seem to just fill in the sparse areas and
-	!! make the plot more washed-out and less interesting
-	!template = [                &
-	!	1, 1, 1, 0, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 0, 0, 0, 0, &
-	!	1, 1, 1, 1, 1, 0, 0, 0, &
-	!	0, 1, 1, 1, 1, 1, 0, 0, &
-	!	0, 0, 1, 1, 1, 1, 1, 0, &
-	!	0, 0, 0, 1, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 1, 1, 1, 1, &
-	!	0, 0, 0, 0, 0, 1, 1, 1  &
-	!	]
-
-	!! Fully-dense
-	!template = 1
-
-	!! Colormap file and name
-	!s%fcolormap = "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json"
-
-	!s%colormap = "Inferno (matplotlib)"
-	!s%colormap = "Viridis (matplotlib)"
-	!s%colormap = "Magma (matplotlib)"
-	!s%colormap = "Plasma (matplotlib)"
-
-	!s%colormap = "erdc_blue2green_BW"
-	!s%colormap = "Black, Blue and White"
-	!s%colormap = "Blue Orange (divergent)"
-
-	!s%colormap = "Asymmtrical Earth Tones (6_21b)"
-
-	!! Similar to erdc_blue2green_BW.  Not bad
-	!s%colormap = "gist_earth"
-
-	!! Meh
-
-	!s%colormap = "Blue - Green - Orange"
-	!s%colormap = "Blue to Red Rainbow"
-
-	!! This is just plain inferior to inferno.  They're very similar, but
-	!! inferno has some purple.
-	!s%colormap = "Black-Body Radiation"
-
-	!! Custom
-	!s%fcolormap = "custom-maps.json"
-	!s%colormap = "bisexual"
-	!s%colormap = "bisexual-light"
-
-	!! Pretty ugly
-	!s%colormap = "cyan-magenta"
+	!print *, 'size(s%inz) = ', size(s%inz)
+	!print *, 'size(s%inz)  = ', size(s%inz)
+	!print *, 's%fcolormap = ', s%fcolormap
 
 contains
 
@@ -1007,8 +930,7 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	character(kind=json_CK, len=:), allocatable :: key, sval
 
-	integer(json_IK) :: var_type, ival, ncount, ij
-	integer :: i, j, k, nnonzero
+	integer(json_IK) :: ival, ncount, ij
 	integer, allocatable :: template(:), t2(:,:)
 
 	logical(json_LK) :: found
@@ -1017,167 +939,187 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	type(json_value), pointer :: pc
 
-	! JSON keys
-	character(len = *), parameter :: &
-		population_id = 'Population'     , &
-		template_id   = 'Template matrix', &
-		samples_id    = 'Samples'        , &
-		img_size_id   = 'Image size'     , &
-		fcolormap_id  = 'Colormap file'  , &
-		colormap_id   = 'Colormap name'
-
 	! Get the name of the key and the type of its value
-	call json%info(p, name = key, var_type = var_type)
+	call json%info(p, name = key)
 
 	! TODO: parse bounds, image y, etc.  Not required for 2-pass run
 
-	! TODO: remove var_type conditions, they aren't necessary.  Simply use
-	! %get() inside each key condition instead
+	!print *, 'key = "'//key//'"'
 
-	! String values
-	if (var_type == json_string) then
+	if (key == fcolormap_id) then
 
-		call json%get(p, '@', sval)
+		! Colormap file
+		call json%get(p, '@', s%fcolormap)
 
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = "'//sval//'"'
+	else if (key == colormap_id) then
 
-		if (key == fcolormap_id) then
+		! Colormap name
+		call json%get(p, '@', s%colormap)
 
-			! Colormap file
-			s%fcolormap = sval
+	else if (key == samples_id) then
 
-		else if (key == colormap_id) then
+		! Number of random samples to take.  json-fortran doesn't seem to support
+		! integer*8.  Cast from real instead to handle large values >~ 2 billion
+		call json%get(p, '@', rvalx)
+		!call json%get(p, '@', s%nsample)
+		s%nsample = int(rvalx, kind = 8)
 
-			! Colormap name
-			s%colormap = sval
+	else if (key == margin_id) then
 
-		else if (key /= "") then
+		! Margin (as a fraction of 1) for plot boundary
+		call json%get(p, '@', s%margin)
 
-			! TODO: can this be done generically for any type?
-			write(*,*) 'Warning:  unknown string JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
+	else if (key == img_size_id) then
 
-		end if
+		! Image size.  In a 2-pass run, one of these is automatically
+		! resized later for an appropriate aspect ratio
+		call json%get(p, '@', s%nx)
+		s%ny = s%nx
 
-	! Integer values
-	else if (var_type == json_integer) then
+	else if (key == population_id) then
 
-		call json%get(p, '@', ival)
+		! Generator sample set.  This is called the "population"
+		ncount = json%count(p)
 
-		!print *, 'key = "'//key//'"'
-		!print *, 'val = ', ival
+		! Size of population (real + imaginary pairs)
+		s%np = ncount / 2
 
-		if (key == samples_id) then
+		allocate(s%p(s%np))
 
-			! Number of random samples to take
-			s%nsample = ival
+		do ij = 0, s%np - 1
 
-		else if (key == img_size_id) then
+			call json%get_child(p, ij*2 + 1, pc, found)
+			call json%get(pc, '@', rvalx)
+			call json%get_child(p, ij*2 + 2, pc, found)
+			call json%get(pc, '@', rvaly)
 
-			! Image size.  In a 2-pass run, one of these is automatically
-			! resized later for an appropriate aspect ratio
-			s%nx = ival
-			s%ny = ival
+			s%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
 
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown integer JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			write(*,*) 'Value  : ', ival
-			write(*,*)
+		end do
 
-		end if
+		!print *, 's%p = ', s%p
 
-	else if (var_type == json_array) then
+	else if (key == mat_size_id) then
+
+		s%size_defined = .true.
+		call json%get(p, '@', s%n)
+
+	else if (key == struct_id) then
+
+		! Structure string array
+		ncount = json%count(p)
+
+		do ij = 1, ncount
+
+			call json%get_child(p, ij, pc, found)
+			call json%get(pc, '@', sval)
+
+			!print *, 'sval = ', sval
+
+			! TODO:  implement other structures.  Check for conflicts, e.g.
+			! tridiagonal and Hessenberg.  Explicit template conflicts with
+			! tridiagonal, Hessenberg, and dense.
+
+			if (sval == toeplitz_id) then
+				s%toeplitz = .true.
+
+			else if (sval == hessenberg_id) then
+				s%hessenberg = .true.
+
+			else if (sval == tridiagonal_id) then
+				s%tridiagonal = .true.
+
+			else if (sval == symmetric_id) then
+				s%symmetric = .true.
+
+			else if (sval == skew_sym_id) then
+				s%skew_sym = .true.
+
+			else if (sval == hermitian_id) then
+				s%hermitian = .true.
+
+			else if (sval == dense_id) then
+				s%dense = .true.
+
+			else
+				write(*,*) 'Error: unknown '//struct_id//' string'
+				write(*,*) 'String: '//sval
+				write(*,*)
+				finished = .true.
+				io = ERR_JSON_SYNTAX
+
+			end if
+
+		end do
+
+	else if (key == template_id) then
+
+		! Non-zero pattern template matrix
+		s%template_defined = .true.
 
 		ncount = json%count(p)
 
-		!print *, 'array key = "'//key//'"'
-		!print *, 'ncount = ', ncount
-		!print *, ''
+		! Size of matrices
+		if (s%size_defined) then
 
-		if (key == population_id) then
+			if (s%n * s%n /= ncount) then
+				write(*,*) 'Error: '//template_id//' size does not match ' &
+						//mat_size_id
+				write(*,*)
+				finished = .true.
+				io = ERR_JSON_SYNTAX
+			end if
 
-			! Generator sample set.  This is called the "population"
+		else
 
-			! Size of population (real + imaginary pairs)
-			s%np = ncount / 2
-
-			allocate(s%p(s%np))
-
-			do ij = 0, s%np - 1
-
-				call json%get_child(p, ij*2 + 1, pc, found)
-				call json%get(pc, '@', rvalx)
-				call json%get_child(p, ij*2 + 2, pc, found)
-				call json%get(pc, '@', rvaly)
-
-				s%p(ij + 1) = cmplx(rvalx, rvaly, kind = 8)
-
-			end do
-
-			!print *, 's%p = ', s%p
-
-		else if (key == template_id) then
-
-			! Non-zero pattern template matrix
-
-			! Size of matrices
-			!
-			! TODO: this is dangerous.  There's no Fortran integer sqrt
+			! This is dangerous.  There's no Fortran integer sqrt
 			s%n = int(sqrt(dble(ncount)))
 
 			!print *, 's%n = ', s%n
 
-			! TODO
 			if (s%n * s%n /= ncount) then
-				write(*,*) 'Error: matrix is not square'
+				write(*,*) 'Error: '//template_id//' is not square'
+				write(*,*)
+				finished = .true.
+				io = ERR_JSON_SYNTAX
 			end if
 
-			allocate(template(s%n * s%n))
-
-			do ij = 1, ncount
-				call json%get_child(p, ij, pc, found)
-				call json%get(pc, '@', ival)
-				!print *, 'ival = ', ival
-				template(ij) = ival
-			end do
-
-			! Number of non-zeros in matrix
-			nnonzero = count(template /= 0)
-
-			allocate(t2(s%n, s%n))
-			t2 = reshape(template, [s%n, s%n])
-			deallocate(template)
-
-			! Indices of non-zeros
-			allocate(s%inz(2, nnonzero))
-
-			! Mark non-zero locations from template 1/0's matrix
-			k = 0
-			do i = 1, s%n
-			do j = 1, s%n
-
-				! Note the transpose from row-major template to Fortran default
-				! column-major
-				if (t2(j, i) /= 0) then
-					k = k + 1
-					s%inz(:, k) = [i, j]
-				end if
-
-			end do
-			end do
-			deallocate(t2)
-
-		else if (key /= "") then
-			write(*,*) 'Warning:  unknown array JSON key'
-			write(*,*) 'Key    : "'//key//'"'
-			!write(*,*) 'Value  : "'//sval//'"'
-			write(*,*)
-
 		end if
+
+		allocate(template(s%n * s%n))
+
+		do ij = 1, ncount
+			call json%get_child(p, ij, pc, found)
+			call json%get(pc, '@', ival)
+			!print *, 'ival = ', ival
+			template(ij) = ival
+		end do
+
+		! Number of non-zeros in matrix
+		nnonzero = count(template /= 0)
+
+		allocate(t2(s%n, s%n))
+		t2 = reshape(template, [s%n, s%n])
+		deallocate(template)
+
+		! Indices of non-zeros
+		allocate(s%inz(2, nnonzero))
+
+		! Mark non-zero locations from template 1/0's matrix
+		k = 0
+		do j = 1, s%n
+		do i = 1, s%n
+
+			! Note the transpose from row-major template to Fortran default
+			! column-major
+			if (t2(j, i) /= 0) then
+				k = k + 1
+				s%inz(:, k) = [i, j]
+			end if
+
+		end do
+		end do
+		deallocate(t2)
 
 		! TODO: if possible, update pointer p to tail of array, so this callback
 		! doesn't reiterate through each element individually
@@ -1186,10 +1128,26 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	else if (key /= "" .and. key /= s%fjson) then
 
-		write(*,*) 'Warning:  unknown JSON key with unexpected type'
+		! TODO: consider making this an error, unless running with a "loose
+		! syntax" cmd arg.  Same idea for unknown cmd args.  Allowing unknown
+		! keys is good for future compatibility but bad for users who might make
+		! typos.
+
+		write(*,*) 'Warning:  unknown JSON key'
 		write(*,*) 'Key    :"'//key//'"'
-		write(*,*) 'Type   :', var_type
 		write(*,*)
+
+	end if
+
+	if (json%failed()) then
+
+		write(*,*) 'Error:'
+		write(*,*) 'Could not load file "'//s%fjson//'"'
+		write(*,*)
+		call json%print_error_message()
+		write(*,*)
+		finished = .true.
+		io = ERR_JSON_SYNTAX
 
 	end if
 
@@ -1201,6 +1159,84 @@ end subroutine traverse_bomat_json
 !===============================================================================
 
 end subroutine load_settings
+
+!===============================================================================
+
+subroutine bomat_settings_print(s)
+
+	use iso_fortran_env
+
+	class(bomat_settings), intent(in) :: s
+
+	character(len = *), parameter :: dlm = ': ', vdm = ', '
+
+	!********
+
+	integer :: i, j, iu
+	integer, allocatable :: t2(:,:)
+
+	! This could be an optional argument for printing to file
+	iu = output_unit
+
+	! Settings like fjson, arg_plot, etc. are not printed.  Only JSON file
+	! settings
+
+	write(iu, *) fcolormap_id, dlm, s%fcolormap
+	write(iu, *) colormap_id , dlm, s%colormap
+	write(iu, *) img_size_id , dlm, s%nx
+	write(iu, *) margin_id   , dlm, s%margin
+	write(iu, *) samples_id  , dlm, s%nsample
+
+	if (s%template_defined .or. debug > 0) then
+
+		! Recreate template matrix just to print it
+		allocate(t2(s%n, s%n))
+		t2 = 0
+		do i = 1, size(s%inz, 2)
+			t2(s%inz(1,i), s%inz(2,i)) = 1
+		end do
+
+		write(iu, *) template_id, dlm
+		write(iu, *) '['
+		do i = 1, s%n
+			write(iu, '(a)', advance = 'no') t
+			do j = 1, s%n
+				write(iu, '(i0,a)', advance = 'no') t2(i,j), vdm
+			end do
+		write(iu, *)
+		end do
+		write(iu, *) ']'
+
+	end if
+
+	if (s%size_defined) then
+		write(iu, *) mat_size_id, dlm, s%n
+	end if
+
+	write(iu, *) struct_id, dlm
+	write(iu, *) '['
+
+	if (s%toeplitz)    write(iu, *) t, toeplitz_id   , vdm
+	if (s%tridiagonal) write(iu, *) t, tridiagonal_id, vdm
+	if (s%hessenberg)  write(iu, *) t, hessenberg_id , vdm
+	if (s%symmetric)   write(iu, *) t, symmetric_id  , vdm
+	if (s%skew_sym)    write(iu, *) t, skew_sym_id   , vdm
+	if (s%hermitian)   write(iu, *) t, hermitian_id  , vdm
+	if (s%dense)       write(iu, *) t, dense_id      , vdm
+
+	write(iu, *) ']'
+
+	write(iu, *) population_id, dlm
+	write(iu, *) '['
+	do i = 1, s%np
+		write(iu, '(a,es14.4,a,es14.4,a)') t, real(s%p(i)), vdm, &
+		                                     aimag(s%p(i)), vdm
+	end do
+	write(iu, *) ']'
+
+	write(iu, *)
+
+end subroutine bomat_settings_print
 
 !===============================================================================
 

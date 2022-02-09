@@ -1,0 +1,58 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		 1  , 0,
+		 0  , 0,
+		-1  , 0
+	],
+
+	#"Matrix structure":
+	#[
+	#	"Toeplitz",
+	#	"Tridiagonal",
+	#	"Hessenberg",
+	#	"Symmetric",
+	#	"Skew symmetric",
+	#	"Hermitian",
+	#	"Dense"
+	#],
+
+	#"Matrix size": 5,
+
+	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
+	# from population.  This JSON array is rank-1, but it is reshaped in
+	# a row-major sense into a rank-2 matrix
+	"Template matrix":
+	[
+		1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1
+	],
+
+	"Samples": 1e6,
+
+	"Image size": 1080,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Inferno (matplotlib)"
+	"Colormap name": "Magma (matplotlib)"
+#	"Colormap name": "Viridis (matplotlib)"
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Blue Orange (divergent)"
+#	"Colormap name": "Black, Blue and White"
+#	"Colormap name": "Asymmtrical Earth Tones (6_21b)"
+#	"Colormap name": "gist_earth"
+
+#	"Colormap file": "custom-maps.json",
+#	"Colormap name": "bisexual"
+#	"Colormap name": "cyan-magenta"
+
+}
+
+

@@ -1,14 +1,12 @@
 {
 
-	# This is a comment (non-standard JSON extension)
-
 	# Complex numbers
 	"Population":
 	[
 		# Re, Im
-		1   , -1,
-		1   ,  0,
-		1   ,  1
+		-1  , 1.5,
+		 0  , 1.5,
+		 1  , 1.5 
 	],
 
 	# Integers-only.  Zeros will remain 0, non-zeros will be sampled randomly
@@ -26,11 +24,21 @@
 		0, 0, 0, 0, 0, 0, 1, 1
 	],
 
-	"Samples": 100000,
+	"Samples": 100000000,
 
-	"Image size": 480,
+	"Image size": 3840,
 
 	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
-	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "Inferno (matplotlib)"
+#	"Colormap name": "Magma (matplotlib)"
+#	"Colormap name": "Viridis (matplotlib)"
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+	"Colormap name": "Blue Orange (divergent)"
+#	"Colormap name": "Black, Blue and White"
+
+#	"Colormap file": "custom-maps.json",
+#	"Colormap name": "bisexual"
+#	"Colormap name": "cyan-magenta"
 
 }
