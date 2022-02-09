@@ -463,20 +463,13 @@ subroutine draw_plot(s, d, io)
 	write(*,*) 'Non-zero pixel fraction = ', real(nnzh) / nxy
 	write(*,*)
 
-	! TODO:  benchmark the reshape difference here with -p and large img
-	!allocate(hist1(nxy))
-	!hist1 = reshape(d%hist, [nxy])
-
 	j = 0
 	h0 = 0
 	do i = 1, nxy
-		!h = hist1(idx(i) + 1)
 
 		! Convert 1D 0-based index to 2D 1-based indices.  This is more complex
 		! than reshaping the hist array, but it doesn't require copying
 		! a potentially large amount of data
-
-		!iy = (idx(i) + 1) / s%nx
 		iy = idx(i) / s%nx + 1
 		ix = mod(idx(i), s%nx) + 1
 
@@ -889,6 +882,26 @@ subroutine load_settings(s, io)
 		do i = 1, s%n
 
 			if (i <= j + 1) then
+				k = k + 1
+				s%inz(:, k) = [i, j]
+			end if
+
+		end do
+		end do
+
+	else if (s%tridiagonal) then
+
+		nnonzero = s%n + 2 * (s%n - 1)
+
+		! Indices of non-zeros
+		allocate(s%inz(2, nnonzero))
+
+		! Mark non-zero locations from template 1/0's matrix
+		k = 0
+		do j = 1, s%n
+		do i = 1, s%n
+
+			if (i <= j + 1 .and. i >= j - 1) then
 				k = k + 1
 				s%inz(:, k) = [i, j]
 			end if

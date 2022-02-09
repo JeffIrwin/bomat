@@ -4,9 +4,9 @@
 	"Population":
 	[
 		# Re, Im
-		-1, 1,
-		 0, 1,
-		 1, 1
+		-1, -1,
+		 0, -1,
+		 1, -1
 	],
 
 	"Matrix structure":
