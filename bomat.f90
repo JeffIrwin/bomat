@@ -12,12 +12,13 @@ module mbomat
 
 	! JSON keys
 	character(len = *), parameter :: &
+		population_id = 'Population'      , &
 		struct_id     = 'Matrix structure', &
 		mat_size_id   = 'Matrix size'     , &
-		population_id = 'Population'      , &
 		template_id   = 'Template matrix' , &
 		samples_id    = 'Samples'         , &
 		img_size_id   = 'Image size'      , &
+		margin_id     = 'Margin'          , &
 		fcolormap_id  = 'Colormap file'   , &
 		colormap_id   = 'Colormap name'
 
@@ -31,12 +32,13 @@ module mbomat
 		hermitian_id   = "Hermitian"     , &
 		dense_id       = "Dense"
 
-	double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
-
-	double precision, parameter :: pi = 4.d0 * atan(1.d0)
+	!double complex, parameter :: ic = cmplx(0.d0, 1.d0, kind = 8)
+	!double precision, parameter :: pi = 4.d0 * atan(1.d0)
 
 	! C++ routines from colormapper submodule
 	integer, external :: load_colormap, writepng
+
+	integer, parameter :: debug = 0
 
 	integer, parameter :: nrgb = 3
 
@@ -62,7 +64,7 @@ module mbomat
 
 		double complex, allocatable :: p(:)
 
-		double precision :: xmin, xmax, ymin, ymax
+		double precision :: xmin, xmax, ymin, ymax, margin = 0.d0
 
 		logical :: size_defined = .false., template_defined = .false.
 
@@ -237,9 +239,11 @@ subroutine calc_eigenvalues(s, d, io)
 	dx = s%xmax - s%xmin
 	dy = s%ymax - s%ymin
 
-	! Eigenvalue density histogram
-	allocate(d%hist(s%nx, s%ny))
-	d%hist = 0
+	if (s%arg_in_core) then
+		! Eigenvalue density histogram
+		allocate(d%hist(s%nx, s%ny))
+		d%hist = 0
+	end if
 
 	neigen = 0
 
@@ -253,8 +257,8 @@ subroutine calc_eigenvalues(s, d, io)
 	write(*, '(a)', advance = 'no') ' |'
 
 	!$OMP parallel do default(shared) schedule(static) &
-	!$OMP&    reduction(min:wxmin,wymin) reduction(+:neigen) &
-	!$OMP&    reduction(max:wxmax,wymax) &
+	!$OMP&    reduction(min: wxmin, wymin) reduction(+: neigen) &
+	!$OMP&    reduction(max: wxmax, wymax) &
 	!$OMP&    private(a, i, info, ix, iy, w, vl, vr, work, rwork, wx, wy)
 	do is = 1, s%nsample
 
@@ -427,8 +431,8 @@ subroutine draw_plot(s, d, io)
 
 	double precision :: xi, xi0
 
-	integer :: i, j, nnzh, nxy
-	integer, allocatable :: idx(:), hist1(:)
+	integer :: i, j, ix, iy, nnzh, nxy, h, h0
+	integer, allocatable :: idx(:)!, hist1(:)
 
 	! Not actually thrown from here
 	io = 0
@@ -436,11 +440,7 @@ subroutine draw_plot(s, d, io)
 	write(*,*) 'Coloring pixels ...'
 	write(*,*)
 
-	! TODO: reshape to img(nrgb, s%nx(,*)s%ny)?  C++ call shouldn't care
-
 	!print *, 'd%hist = ', d%hist(1:100,1)
-
-	! TODO: can C allocate idx inside sortidx() function?
 
 	! Note that sortidx treats hist as a rank-1 array and returns 0-based rank-1
 	! indices in idx
@@ -460,17 +460,28 @@ subroutine draw_plot(s, d, io)
 	write(*,*) 'Non-zero pixel fraction = ', real(nnzh) / nxy
 	write(*,*)
 
-	! TODO:  avoid reshaping.  Do 1d/2d index math instead?  Or can we use
-	! move_alloc for different ranks?
-	allocate(hist1(nxy))
-	hist1 = reshape(d%hist, [nxy])
+	! TODO:  benchmark the reshape difference here with -p and large img
+	!allocate(hist1(nxy))
+	!hist1 = reshape(d%hist, [nxy])
 
 	j = 0
+	h0 = 0
 	do i = 1, nxy
+		!h = hist1(idx(i) + 1)
 
-		if (hist1(idx(i) + 1) == 0) then
+		! Convert 1D 0-based index to 2D 1-based indices.  This is more complex
+		! than reshaping the hist array, but it doesn't require copying
+		! a potentially large amount of data
+
+		!iy = (idx(i) + 1) / s%nx
+		iy = idx(i) / s%nx + 1
+		ix = mod(idx(i), s%nx) + 1
+
+		h = d%hist(ix,iy)
+
+		if (h == 0) then
 			xi = 0.d0
-		else if (i > 0 .and. hist1(idx(i) + 1) == hist1(idx(i-1) + 1)) then
+		else if (i > 0 .and. h == h0) then
 			j = j + 1
 			xi = xi0
 		else
@@ -482,10 +493,11 @@ subroutine draw_plot(s, d, io)
 		call map(xi, rgb)
 		d%img(idx(i) * nrgb + 1: idx(i) * nrgb + 3) = rgb
 
+		h0 = h
 	end do
 
-	! TODO:  deallocate arrays as soon as they're done being used
-
+	! Deallocate arrays as soon as they're done being used?  This is almost the
+	! last subroutine anyway, other than writepng.
 	!deallocate(d%hist)
 
 end subroutine draw_plot
@@ -509,7 +521,7 @@ subroutine load_eigenvalues(s, d, io)
 	integer, parameter :: nchunk = 1024 ** 2  ! optimal value?
 
 	double precision :: dx, dy, wxmin, wxmax, wymin, wymax, &
-			wmargin, dwx, dwy
+			dwx, dwy
 
 	!! Parameterized array sizes crash gfortran for large nchunk.  Allocatable
 	!! arrays work better, may be stack/heap difference
@@ -539,14 +551,10 @@ subroutine load_eigenvalues(s, d, io)
 	dwx = wxmax - wxmin
 	dwy = wymax - wymin
 
-	!! TODO: add input setting for margin
-	!wmargin = 0.025d0
-	wmargin = 0.d0
-
-	s%xmin = wxmin - wmargin*dwx
-	s%xmax = wxmax + wmargin*dwx
-	s%ymin = wymin - wmargin*dwy
-	s%ymax = wymax + wmargin*dwy
+	s%xmin = wxmin - s%margin * dwx
+	s%xmax = wxmax + s%margin * dwx
+	s%ymin = wymin - s%margin * dwy
+	s%ymax = wymax + s%margin * dwy
 
 	dx = s%xmax - s%xmin
 	dy = s%ymax - s%ymin
@@ -953,6 +961,11 @@ subroutine traverse_bomat_json(json, p, finished)
 		!call json%get(p, '@', s%nsample)
 		s%nsample = int(rvalx, kind = 8)
 
+	else if (key == margin_id) then
+
+		! Margin (as a fraction of 1) for plot boundary
+		call json%get(p, '@', s%margin)
+
 	else if (key == img_size_id) then
 
 		! Image size.  In a 2-pass run, one of these is automatically
@@ -1112,6 +1125,11 @@ subroutine traverse_bomat_json(json, p, finished)
 
 	else if (key /= "" .and. key /= s%fjson) then
 
+		! TODO: consider making this an error, unless running with a "loose
+		! syntax" cmd arg.  Same idea for unknown cmd args.  Allowing unknown
+		! keys is good for future compatibility but bad for users who might make
+		! typos.
+
 		write(*,*) 'Warning:  unknown JSON key'
 		write(*,*) 'Key    :"'//key//'"'
 		write(*,*)
@@ -1163,9 +1181,10 @@ subroutine bomat_settings_print(s)
 	write(iu, *) fcolormap_id, dlm, s%fcolormap
 	write(iu, *) colormap_id , dlm, s%colormap
 	write(iu, *) img_size_id , dlm, s%nx
+	write(iu, *) margin_id   , dlm, s%margin
 	write(iu, *) samples_id  , dlm, s%nsample
 
-	if (s%template_defined) then
+	if (s%template_defined .or. debug > 0) then
 
 		! Recreate template matrix just to print it
 		allocate(t2(s%n, s%n))
