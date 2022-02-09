@@ -18,8 +18,14 @@ See the original project:  https://github.com/BohemianMatrices/BHIME-Project
 
 ## Build
 
-Use CMake, or run the provided CMake wrapper script:
+Use the provided CMake wrapper script.  If using `gfortran` and reference LAPACK, build that first one time too:
 
+    ./build-lapack.sh
+    ./build.sh
+
+If using `ifort`, there is no need to build LAPACK.  Just export the environment variable to tell bomat's CMake list to use the Intel Fortran compiler:
+
+    export BOMAT_INTEL=true
     ./build.sh
 
 ## Run
