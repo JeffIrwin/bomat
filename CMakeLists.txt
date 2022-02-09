@@ -1,11 +1,17 @@
 
 cmake_minimum_required(VERSION 3.7)
 
-set(CMAKE_Fortran_COMPILER "gfortran")
+if(DEFINED ENV{BOMAT_INTEL})
 
-#set(CMAKE_Fortran_COMPILER "ifort")
-#set(CMAKE_C_COMPILER "icc")
-#set(CMAKE_CXX_COMPILER "icpc")
+	set(CMAKE_Fortran_COMPILER "ifort")
+	set(CMAKE_C_COMPILER "icc")
+	set(CMAKE_CXX_COMPILER "icpc")
+
+else()
+
+	set(CMAKE_Fortran_COMPILER "gfortran")
+
+endif()
 
 set(PROJECT bomat)
 
@@ -13,11 +19,16 @@ project(${PROJECT} Fortran CXX)
 
 # TODO:  build LAPACK if necessary via make for gfortran (no need for ifort)
 
-if(${CMAKE_Fortran_COMPILER} STREQUAL "ifort")
+if(DEFINED ENV{BOMAT_INTEL})
 	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
 else()
 	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -Wno-tabs -Wno-maybe-uninitialized")
 endif()
+
+message("")
+message("CMAKE_Fortran_COMPILER = ${CMAKE_Fortran_COMPILER}")
+message("CMAKE_Fortran_FLAGS = ${CMAKE_Fortran_FLAGS}")
+message("")
 
 set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
@@ -32,7 +43,7 @@ if(APPLE)
 
 else()
 
-	if(${CMAKE_Fortran_COMPILER} STREQUAL "ifort")
+	if(DEFINED ENV{BOMAT_INTEL})
 		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp -qmkl")
 	else()
 		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
@@ -78,7 +89,7 @@ set(LINK_LIBS
 	jsonfortran-static
 	)
 
-if(NOT (${CMAKE_Fortran_COMPILER} STREQUAL "ifort"))
+if(NOT DEFINED ENV{BOMAT_INTEL})
 
 	list(APPEND LINK_LIBS
 		${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/liblapack.a
