@@ -881,6 +881,7 @@ subroutine load_settings(s, io)
 		do j = 1, s%n
 		do i = 1, s%n
 
+			! TODO: just set the i loop bounds accordingly
 			if (i <= j + 1) then
 				k = k + 1
 				s%inz(:, k) = [i, j]
