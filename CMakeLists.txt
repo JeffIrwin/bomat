@@ -1,11 +1,11 @@
 
 cmake_minimum_required(VERSION 3.7)
 
-#set(CMAKE_Fortran_COMPILER "gfortran")
-set(CMAKE_Fortran_COMPILER "ifort")
+set(CMAKE_Fortran_COMPILER "gfortran")
 
-set(CMAKE_C_COMPILER "icc")
-set(CMAKE_CXX_COMPILER "icpc")
+#set(CMAKE_Fortran_COMPILER "ifort")
+#set(CMAKE_C_COMPILER "icc")
+#set(CMAKE_CXX_COMPILER "icpc")
 
 set(PROJECT bomat)
 
@@ -13,21 +13,31 @@ project(${PROJECT} Fortran CXX)
 
 # TODO:  build LAPACK if necessary via make for gfortran (no need for ifort)
 
-# TODO: remove uninit flag.  It's for a gfortran bug
-set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
-#set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -Wno-tabs -Wno-maybe-uninitialized")
+if(${CMAKE_Fortran_COMPILER} STREQUAL "ifort")
+	set(CMAKE_Fortran_FLAGS "-W1 -qopenmp -qmkl -fPIC")
+else()
+	set(CMAKE_Fortran_FLAGS "-Wall -Wextra -fopenmp -Wno-tabs -Wno-maybe-uninitialized")
+endif()
 
 set(CMAKE_Fortran_FLAGS_DEBUG "-pedantic -fbounds-check -fbacktrace")
 set(CMAKE_Fortran_FLAGS_RELEASE "-O3")
 
 if(APPLE)
+
 	set(CMAKE_EXE_LINKER_FLAGS "-openmp -Wl,-no_compact_unwind")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 	set(CMAKE_C_COMPILER "gcc")
 	set(CMAKE_CXX_COMPILER "gcc")
 	#set(CMAKE_CXX_COMPILER "g++")
+
 else()
-	set(CMAKE_EXE_LINKER_FLAGS "-fopenmp -qmkl")
+
+	if(${CMAKE_Fortran_COMPILER} STREQUAL "ifort")
+		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp -qmkl")
+	else()
+		set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
+	endif()
+
 endif()
 
 message("")
@@ -62,11 +72,24 @@ include_directories(
 	${CMAKE_CURRENT_BINARY_DIR}/${SUBMODULE_DIR}/${JSONFORTRAN}/include
 	)
 
-target_link_libraries(${PROJECT}
-	#${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/liblapack.a
-	#${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/librefblas.a
+set(LINK_LIBS
 	${COLORMAPPER}
 #	#${PNMIO}
 	jsonfortran-static
 	)
+
+if(NOT (${CMAKE_Fortran_COMPILER} STREQUAL "ifort"))
+
+	list(APPEND LINK_LIBS
+		${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/liblapack.a
+		${CMAKE_SOURCE_DIR}/${LAPACK_DIR}/librefblas.a
+		)
+
+endif()
+
+target_link_libraries(${PROJECT} ${LINK_LIBS})
+
+message("")
+message("LINK_LIBS = ${LINK_LIBS}")
+message("")
 
