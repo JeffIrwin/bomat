@@ -70,7 +70,8 @@ module mbomat
 
 		! Command-line arguments
 		logical :: arg_in_core = .false., arg_eig = .false., &
-				arg_plot = .false., arg_help = .false.
+				arg_plot = .false., arg_help = .false., &
+				arg_dry = .false.
 
 		! TODO:  add n-diagonal option, with n a variable int, e.g. tridiagonal,
 		! pentadiagonal, etc. (generalization of tridiagonal)
@@ -135,6 +136,12 @@ subroutine bomat(io)
 	io = load_colormap(s%fcolormap//nullc, s%colormap//nullc)
 	if (io /= 0) then
 		io = ERR_COLORMAP
+		return
+	end if
+
+	if (s%arg_dry) then
+		write(*,*) "Done "//me//" dry run"
+		write(*,*)
 		return
 	end if
 
@@ -668,6 +675,7 @@ subroutine load_args(s, io)
 			id_help = "--help"    , &
 			id_inco = "-i"        , &
 			id_plot = "-p"        , &
+			id_dry  = "-d"        , &
 			id_eig  = "-e"
 
 	integer :: argc, i, ipos
@@ -675,8 +683,8 @@ subroutine load_args(s, io)
 	io = 0
 
 	help_short = "" &
-			//"Usage: "//me//" ["//id_h//"] ["//id_plot//"] ["//id_eig//"] " &
-			//id_file//newline &
+			//"Usage: "//me//" ["//id_h//"] ["//id_eig//"] ["//id_plot//"] [" &
+			//id_dry//"] "//id_file//newline &
 			//newline &
 			//"Calculate Bohemian matrix eigenvalues and export a plot to a " &
 			//"PNG file"//newline &
@@ -688,6 +696,7 @@ subroutine load_args(s, io)
 			//id_h//", "//id_help//"  Show this help message and exit"//newline &
 			//id_eig //"          Calculate and export eigenvalues without plotting"//newline &
 			//id_plot//"          Plot eigenvalues from previous job"//newline &
+			//id_dry //"          Dry run -- check inputs for syntax only"//newline &
 			//newline
 
 	! TODO: add structures to help text, e.g. Hessenberg, Toeplitz, ...
@@ -736,15 +745,6 @@ subroutine load_args(s, io)
 
 	argc = command_argument_count()
 
-	if (argc < 1) then
-		write(*,*) 'Error: required positional argument '//id_file &
-				//' is not defined'
-		write(*,*)
-		write(*, '(a)') help_short
-		io = ERR_CMD_ARGS
-		return
-	end if
-
 	ipos = 0
 	i = 0
 	do while (i < argc)
@@ -763,6 +763,9 @@ subroutine load_args(s, io)
 
 		else if (argv == id_eig) then
 			s%arg_eig = .true.
+
+		else if (argv == id_dry) then
+			s%arg_dry = .true.
 
 		else if (argv == id_h .or. argv == id_help) then
 			write(*, '(a)') help
@@ -783,6 +786,15 @@ subroutine load_args(s, io)
 			end if
 		end if
 	end do
+
+	if (ipos < 1) then
+		write(*,*) 'Error: required positional argument '//id_file &
+				//' is not defined'
+		write(*,*)
+		write(*, '(a)') help_short
+		io = ERR_CMD_ARGS
+		return
+	end if
 
 	!print *, 'arg_eig  = ', s%arg_eig
 	!print *, 'arg_plot = ', s%arg_plot
