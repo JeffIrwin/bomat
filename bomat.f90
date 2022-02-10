@@ -283,7 +283,11 @@ subroutine calc_eigenvalues(s, d, io)
 		!$OMP end critical
 
 		!$OMP critical
-		! TODO: use abstract interfaces.  c.f. blog
+
+		! TODO: use abstract interfaces.  c.f. blog.
+
+		! TODO: implement symmetric, Hermitian, etc.
+
 		if (s%toeplitz) then
 			a = random_toeplitz(s)
 		else
@@ -878,7 +882,7 @@ subroutine load_settings(s, io)
 
 	! Mark non-zeros for string-specified structures
 	!
-	! TODO: implement other options besides Hessenberg
+	! TODO: implement dense option
 	if (s%hessenberg) then
 
 		! Upper Hessenberg.  Lower Hessenberg is not implemented, but would it
@@ -891,14 +895,9 @@ subroutine load_settings(s, io)
 		! Mark non-zero locations from template 1/0's matrix
 		k = 0
 		do j = 1, s%n
-		do i = 1, s%n
-
-			! TODO: just set the i loop bounds accordingly
-			if (i <= j + 1) then
-				k = k + 1
-				s%inz(:, k) = [i, j]
-			end if
-
+		do i = 1, min(j + 1, s%n)
+			k = k + 1
+			s%inz(:, k) = [i, j]
 		end do
 		end do
 
@@ -912,13 +911,9 @@ subroutine load_settings(s, io)
 		! Mark non-zero locations from template 1/0's matrix
 		k = 0
 		do j = 1, s%n
-		do i = 1, s%n
-
-			if (i <= j + 1 .and. i >= j - 1) then
-				k = k + 1
-				s%inz(:, k) = [i, j]
-			end if
-
+		do i = max(1, j - 1), min(j + 1, s%n)
+			k = k + 1
+			s%inz(:, k) = [i, j]
 		end do
 		end do
 
