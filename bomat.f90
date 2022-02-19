@@ -298,7 +298,6 @@ subroutine calc_eigenvalues(s, d, io)
 
 		else
 
-			a = random_matrix(s)
 			if (s%symmetric) then
 				a = random_sym_matrix(s)
 			else
