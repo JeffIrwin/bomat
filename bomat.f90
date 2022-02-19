@@ -289,9 +289,22 @@ subroutine calc_eigenvalues(s, d, io)
 		! TODO: implement symmetric, Hermitian, etc.
 
 		if (s%toeplitz) then
-			a = random_toeplitz(s)
+
+			if (s%symmetric) then
+				a = random_sym_toeplitz(s)
+			else
+				a = random_toeplitz(s)
+			end if
+
 		else
+
 			a = random_matrix(s)
+			if (s%symmetric) then
+				a = random_sym_matrix(s)
+			else
+				a = random_matrix(s)
+			end if
+
 		end if
 		!$OMP end critical
 
@@ -388,6 +401,34 @@ end function random_matrix
 
 !=======================================================================
 
+function random_sym_matrix(s) result(a)
+
+	! Make a random matrix with no specific structure with entries sampled from
+	! the population
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double precision :: r
+
+	integer :: i
+
+	! Fill non-zeros of matrix a randomly from population.  inz structure may
+	! conflict with symmetric structure, but this guarantees symmetry
+	a = 0.d0
+	do i = 1, size(s%inz, 2)
+		call random_number(r)
+		a(s%inz(1,i), s%inz(2,i)) = s%p(floor(r * s%np) + 1)
+		a(s%inz(2,i), s%inz(1,i)) = s%p(floor(r * s%np) + 1)
+	end do
+
+end function random_sym_matrix
+
+!=======================================================================
+
 function random_toeplitz(s) result(a)
 
 	! Make a random Toeplitz matrix.  If you don't know what Toeplitz is, a 4x4
@@ -426,6 +467,47 @@ function random_toeplitz(s) result(a)
 	end do
 
 end function random_toeplitz
+
+!=======================================================================
+
+function random_sym_toeplitz(s) result(a)
+
+	! Make a random Toeplitz matrix.  If you don't know what Toeplitz is, a 4x4
+	! is like this:
+	!
+	! [
+	!     e f g h
+	!     d e f g
+	!     c d e f
+	!     b c d e
+	! ]
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double complex :: diags(0: s%n - 1)
+
+	double precision :: r
+
+	integer :: i, j, k
+
+	do i = 0, s%n - 1
+		call random_number(r)
+		diags(i) = s%p(floor(r * s%np) + 1)
+	end do
+
+	! Template-based sparse Toeplitz
+	a = 0.d0
+	do k = 1, size(s%inz, 2)
+		i = s%inz(1,k)
+		j = s%inz(2,k)
+		a(i, j) = diags(abs(i - j))
+	end do
+
+end function random_sym_toeplitz
 
 !=======================================================================
 
@@ -881,8 +963,7 @@ subroutine load_settings(s, io)
 	if (io /= 0) return
 
 	! Mark non-zeros for string-specified structures
-	!
-	! TODO: implement dense option
+
 	if (s%hessenberg) then
 
 		! Upper Hessenberg.  Lower Hessenberg is not implemented, but would it
@@ -912,6 +993,19 @@ subroutine load_settings(s, io)
 		k = 0
 		do j = 1, s%n
 		do i = max(1, j - 1), min(j + 1, s%n)
+			k = k + 1
+			s%inz(:, k) = [i, j]
+		end do
+		end do
+
+	else if (s%dense) then
+
+		nnonzero = s%n ** 2
+		allocate(s%inz(2, nnonzero))
+
+		k = 0
+		do j = 1, s%n
+		do i = 1, s%n
 			k = k + 1
 			s%inz(:, k) = [i, j]
 		end do
