@@ -103,6 +103,18 @@ module mbomat
 
 	!********
 
+	abstract interface
+
+		function random_matrix_interface(s) result(a)
+			import bomat_settings
+			type(bomat_settings), intent(in) :: s
+			double complex :: a(s%n, s%n)
+		end function random_matrix_interface
+
+	end interface
+
+	!********
+
 contains
 
 !===============================================================================
@@ -186,6 +198,8 @@ subroutine calc_eigenvalues(s, d, io)
 
 	!use iso_fortran_env
 
+	procedure(random_matrix_interface), pointer :: rand_mat
+
 	type(bomat_settings), intent(in) :: s
 
 	type(bomat_data), intent(out) :: d
@@ -256,6 +270,26 @@ subroutine calc_eigenvalues(s, d, io)
 
 	neigen = 0
 
+	! TODO: implement skew-symmetric, Hermitian, etc.
+
+	if (s%toeplitz) then
+
+		if (s%symmetric) then
+			rand_mat => random_sym_toeplitz
+		else
+			rand_mat => random_toeplitz
+		end if
+
+	else
+
+		if (s%symmetric) then
+			rand_mat => random_sym_matrix
+		else
+			rand_mat => random_matrix
+		end if
+
+	end if
+
 	open(newunit = id, file = s%fdata, access = "stream")
 
 	write(*,*) 'Sampling eigenvalues ...'
@@ -284,27 +318,8 @@ subroutine calc_eigenvalues(s, d, io)
 
 		!$OMP critical
 
-		! TODO: use abstract interfaces.  c.f. blog.
+		a = rand_mat(s)
 
-		! TODO: implement symmetric, Hermitian, etc.
-
-		if (s%toeplitz) then
-
-			if (s%symmetric) then
-				a = random_sym_toeplitz(s)
-			else
-				a = random_toeplitz(s)
-			end if
-
-		else
-
-			if (s%symmetric) then
-				a = random_sym_matrix(s)
-			else
-				a = random_matrix(s)
-			end if
-
-		end if
 		!$OMP end critical
 
 		!! There is no Fortran edit descriptor for complex numbers :(
@@ -471,13 +486,13 @@ end function random_toeplitz
 
 function random_sym_toeplitz(s) result(a)
 
-	! Make a random Toeplitz matrix.  If you don't know what Toeplitz is, a 4x4
-	! is like this:
+	! Make a random symmetric Toeplitz matrix.  If you don't know what Toeplitz
+	! is, a 4x4 symmetry one is like this:
 	!
 	! [
-	!     e f g h
-	!     d e f g
-	!     c d e f
+	!     e d c b
+	!     d e d c
+	!     c d e d
 	!     b c d e
 	! ]
 
