@@ -14,6 +14,7 @@ module mbomat
 	character(len = *), parameter :: &
 		population_id = 'Population'      , &
 		struct_id     = 'Matrix structure', &
+		bandwidth_id  = 'Matrix bandwidth', &
 		mat_size_id   = 'Matrix size'     , &
 		template_id   = 'Template matrix' , &
 		samples_id    = 'Samples'         , &
@@ -58,7 +59,7 @@ module mbomat
 		character(len = :), allocatable :: f, fcolormap, colormap, fjson, &
 				fdata, fmeta, fpng
 
-		integer :: n, np, nx = 0, ny
+		integer :: n, np, nx = 0, ny, bandwidth = -1
 		integer(kind = 8) :: nsample = 0
 		integer, allocatable :: inz(:,:)
 
@@ -72,9 +73,6 @@ module mbomat
 		logical :: arg_in_core = .false., arg_eig = .false., &
 				arg_plot = .false., arg_help = .false., &
 				arg_dry = .false.
-
-		! TODO:  add n-diagonal option, with n a variable int, e.g. tridiagonal,
-		! pentadiagonal, etc. (generalization of tridiagonal)
 
 		! Matrix structure options
 		logical :: toeplitz = .false., tridiagonal = .false., &
@@ -978,6 +976,8 @@ subroutine load_settings(s, io)
 
 	! Mark non-zeros for string-specified structures
 
+	if (s%tridiagonal) s%bandwidth = 1
+
 	if (s%hessenberg) then
 
 		! Upper Hessenberg.  Lower Hessenberg is not implemented, but would it
@@ -987,7 +987,6 @@ subroutine load_settings(s, io)
 		! Indices of non-zeros
 		allocate(s%inz(2, nnonzero))
 
-		! Mark non-zero locations from template 1/0's matrix
 		k = 0
 		do j = 1, s%n
 		do i = 1, min(j + 1, s%n)
@@ -996,17 +995,19 @@ subroutine load_settings(s, io)
 		end do
 		end do
 
-	else if (s%tridiagonal) then
+	else if (s%bandwidth >= 0) then
 
-		nnonzero = s%n + 2 * (s%n - 1)
+		nnonzero = s%n
+		do i = 1, s%bandwidth
+			nnonzero = nnonzero + 2 * (s%n - i)
+		end do
 
 		! Indices of non-zeros
 		allocate(s%inz(2, nnonzero))
 
-		! Mark non-zero locations from template 1/0's matrix
 		k = 0
 		do j = 1, s%n
-		do i = max(1, j - 1), min(j + 1, s%n)
+		do i = max(1, j - s%bandwidth), min(j + s%bandwidth, s%n)
 			k = k + 1
 			s%inz(:, k) = [i, j]
 		end do
@@ -1030,7 +1031,8 @@ subroutine load_settings(s, io)
 	call s%print()
 
 	!print *, 'size(s%inz) = ', size(s%inz)
-	!print *, 'size(s%inz)  = ', size(s%inz)
+	!print *, 'inz = '
+	!print '(2i8)', s%inz
 	!print *, 's%fcolormap = ', s%fcolormap
 
 contains
@@ -1132,6 +1134,10 @@ subroutine traverse_bomat_json(json, p, finished)
 
 		s%size_defined = .true.
 		call json%get(p, '@', s%n)
+
+	else if (key == bandwidth_id) then
+
+		call json%get(p, '@', s%bandwidth)
 
 	else if (key == struct_id) then
 
@@ -1340,6 +1346,10 @@ subroutine bomat_settings_print(s)
 
 	if (s%size_defined) then
 		write(iu, *) mat_size_id, dlm, s%n
+	end if
+
+	if (s%bandwidth >= 0) then
+		write(iu, *) bandwidth_id, dlm, s%bandwidth
 	end if
 
 	write(iu, *) struct_id, dlm

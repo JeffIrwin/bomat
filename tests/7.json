@@ -1,0 +1,31 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		-2,  2,
+		-2, -1,
+		 2,  2,
+		 2, -1
+	],
+
+	"Matrix structure":
+	[
+		"Symmetric"
+	],
+
+	# 1 is tridiagonal, 2 is pentadiagonal, 3 is heptadiagonal, ...
+	"Matrix bandwidth": 2,
+
+	"Matrix size": 8,
+
+	"Samples": 1e5,
+
+	"Image size": 480,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+	"Colormap name": "erdc_blue2green_BW"
+
+}
+
