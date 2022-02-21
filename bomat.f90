@@ -282,6 +282,8 @@ subroutine calc_eigenvalues(s, d, io)
 
 		if (s%symmetric) then
 			rand_mat => random_sym_matrix
+		else if (s%skew_sym) then
+			rand_mat => random_skew_matrix
 		else
 			rand_mat => random_matrix
 		end if
@@ -415,8 +417,7 @@ end function random_matrix
 
 function random_sym_matrix(s) result(a)
 
-	! Make a random matrix with no specific structure with entries sampled from
-	! the population
+	! Make a random symmetric matrix
 
 	type(bomat_settings), intent(in) :: s
 
@@ -438,6 +439,31 @@ function random_sym_matrix(s) result(a)
 	end do
 
 end function random_sym_matrix
+
+!=======================================================================
+
+function random_skew_matrix(s) result(a)
+
+	! Make a random skew symmetric matrix
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double precision :: r
+
+	integer :: i
+
+	a = 0.d0
+	do i = 1, size(s%inz, 2)
+		call random_number(r)
+		a(s%inz(1,i), s%inz(2,i)) =  s%p(floor(r * s%np) + 1)
+		a(s%inz(2,i), s%inz(1,i)) = -s%p(floor(r * s%np) + 1)
+	end do
+
+end function random_skew_matrix
 
 !=======================================================================
 
