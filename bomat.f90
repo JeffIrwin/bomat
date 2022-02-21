@@ -268,9 +268,11 @@ subroutine calc_eigenvalues(s, d, io)
 
 	neigen = 0
 
-	! TODO: implement skew-symmetric, Hermitian, etc.
-
 	if (s%toeplitz) then
+
+		! TODO: implement skew-symmetric, Hermitian, etc.  Symmetric Toeplitz
+		! seems to be less interesting than other (e.g. tridiagonal) symmetric
+		! matrices
 
 		if (s%symmetric) then
 			rand_mat => random_sym_toeplitz
@@ -284,6 +286,8 @@ subroutine calc_eigenvalues(s, d, io)
 			rand_mat => random_sym_matrix
 		else if (s%skew_sym) then
 			rand_mat => random_skew_matrix
+		else if (s%hermitian) then
+			rand_mat => random_herm_matrix
 		else
 			rand_mat => random_matrix
 		end if
@@ -464,6 +468,31 @@ function random_skew_matrix(s) result(a)
 	end do
 
 end function random_skew_matrix
+
+!=======================================================================
+
+function random_herm_matrix(s) result(a)
+
+	! Make a random Hermitian symmetric matrix
+
+	type(bomat_settings), intent(in) :: s
+
+	double complex :: a(s%n, s%n)
+
+	!********
+
+	double precision :: r
+
+	integer :: i
+
+	a = 0.d0
+	do i = 1, size(s%inz, 2)
+		call random_number(r)
+		a(s%inz(1,i), s%inz(2,i)) =       s%p(floor(r * s%np) + 1)
+		a(s%inz(2,i), s%inz(1,i)) = conjg(s%p(floor(r * s%np) + 1))
+	end do
+
+end function random_herm_matrix
 
 !=======================================================================
 
