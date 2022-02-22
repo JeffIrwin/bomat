@@ -1,0 +1,42 @@
+{
+
+	# Complex numbers
+	"Population":
+	[
+		# Re, Im
+		 0        ,  1  ,
+		-0.8660254, -0.5,
+		 0.8660254, -0.5
+	],
+
+	"Matrix structure":
+	[
+		"Hermitian",
+		"Tridiagonal"
+	],
+
+	"Matrix size": 8,
+
+	"Samples": 1e7,
+
+	"Image size": 1920,#3840,
+
+#	"Margin": 0.025,
+
+	"Colormap file": "submodules/colormapper/submodules/colormaps/ColorMaps5.6.0.json",
+#	"Colormap name": "Inferno (matplotlib)"
+	"Colormap name": "Magma (matplotlib)"
+#	"Colormap name": "Viridis (matplotlib)"
+#	"Colormap name": "Plasma (matplotlib)"
+#	"Colormap name": "erdc_blue2green_BW"
+#	"Colormap name": "Blue Orange (divergent)"
+#	"Colormap name": "Black, Blue and White"
+#	"Colormap name": "Asymmtrical Earth Tones (6_21b)"
+#	"Colormap name": "gist_earth"
+
+#	"Colormap file": "custom-maps.json",
+#	"Colormap name": "bisexual"
+#	"Colormap name": "cyan-magenta"
+
+}
+
