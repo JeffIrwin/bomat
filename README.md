@@ -106,4 +106,4 @@ a higher-quality image.
 
 Finally, you can use `-p` to re-plot with a different colormap without
 recalculating eigenvalues from scratch.
-
+ 
